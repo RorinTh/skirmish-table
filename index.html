@@ -85,6 +85,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .scorepop tfoot th, .scorepop tfoot td { border-top: 1px solid var(--line); font-weight: 600; padding-top: 6px; font-size: 15px; }
 .mini { display: inline-flex; align-items: center; gap: 2px; }
 .mini b { min-width: 22px; font-family: var(--font-mono); font-weight: 500; }
+.topright { justify-self: end; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 0; }
+.top p.credit { font-size: 11px; letter-spacing: .02em; white-space: nowrap; }
 .clock { position: relative; justify-self: end; display: flex; align-items: stretch; gap: 6px; }
 .cside { --pc: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 92px; padding: 3px 10px 4px; background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--pc); border-radius: 8px; cursor: pointer; color: var(--muted); font: inherit; }
 .cside .digits { font-size: 24px; }
@@ -99,6 +101,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .clockpop { right: 0; left: auto; transform: none; width: 260px; }
 .clockpop[hidden] { display: none; }
 .glowpick { gap: 4px; flex-wrap: wrap; }
+a.rulesite { color: var(--fg); text-decoration: none; display: inline-block; }
+.withlink { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.withlink .rulesite { font-size: 12px; padding: 3px 9px; text-transform: none; letter-spacing: 0; font-weight: 500; }
 .dmgbox { flex: 1 1 100%; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 0 2px; }
 .stepper.sh .supval { color: #6fb3ff; }
 .stepper.hp .supval { color: #ff7b82; }
@@ -374,6 +379,8 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 				<div class="scorepop" id="scorePop" role="dialog" aria-label="Score by round" hidden></div>
 			</div>
 		</div>
+		<div class="topright">
+		<p class="credit">Created by Johan Dyrlind with Claude Code</p>
 		<!-- chess clock: tap your own clock to end your turn and start the other player's -->
 		<div class="clock" id="clock" role="group" aria-label="Chess clock">
 			<button class="cside" id="clock0" title="Tap to end this player's turn and start the other clock"><span class="sname"></span><span class="digits">75:00</span></button>
@@ -388,6 +395,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 				<p class="note" style="margin:0">Tap your own clock to end your turn. While paused, tap a clock to start that player's time. <kbd>Space</kbd> switches too.</p>
 				<div class="row"><button class="btn danger" id="clockReset">Reset clocks</button></div>
 			</div>
+		</div>
 		</div>
 	</header>
 
@@ -696,9 +704,11 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 		<section class="box" id="refNote">
 			<h2>Cards &amp; rules</h2>
 			<p class="note">Load your card library under Table &amp; save to browse unit cards and search the rules here.</p>
+			<p class="note">The official rules and unit cards are online: sign in as a guest, then open Factions &amp; Cards.</p>
+			<a class="btn rulesite" href="https://sc.starcraft-tmg.com/" target="_blank" rel="noopener noreferrer" title="The official StarCraft TMG rules and unit cards (sign in as a guest, then Factions &amp; Cards)">Rules site ↗</a>
 		</section>
 		<section class="box" id="cardsBox" hidden>
-			<h2>Unit cards</h2>
+			<h2 class="withlink">Unit cards <a class="btn rulesite" href="https://sc.starcraft-tmg.com/" target="_blank" rel="noopener noreferrer" title="The official StarCraft TMG rules and unit cards (sign in as a guest, then Factions &amp; Cards)">Rules site ↗</a></h2>
 			<input type="text" id="cardSearch" placeholder="Search cards: name, role, tag…" autocomplete="off" aria-label="Search cards">
 			<div class="pick" id="factionPick"></div>
 			<ul class="ulist" id="cardList"></ul>
@@ -2350,7 +2360,7 @@ function unitRowHtml(m, extra) {
 			<button id="cardSupMinus" aria-label="Lower unit supply">−</button>
 			<span class="supval">${u.supply}<small>supply</small></span>
 			<button id="cardSupPlus" aria-label="Raise unit supply">+</button>
-		</span>${u.card && libCard(u.card) ? '<button class="btn" id="cardOpen">Card</button>' : ''}${extra}
+		</span>${u.card && libCard(u.card) ? '<button class="btn" id="cardOpen">Card</button>' : ''}<a class="btn rulesite" href="https://sc.starcraft-tmg.com/" target="_blank" rel="noopener noreferrer" title="The official StarCraft TMG rules and unit cards (sign in as a guest, then Factions &amp; Cards)">Rules ↗</a>${extra}
 		${LIB ? `<label class="row cardmatch"><span class="note">Card</span><select id="cardMatch" aria-label="Card for this unit">${unitCardOptions(u.card)}</select></label>` : ''}
 		<div class="row cardmatch glowpick" role="group" aria-label="Unit glow"><span class="note">Glow</span>
 			<button data-glow="" aria-pressed="${!u.glow}" title="No glow" class="gsw none">✕</button>${GLOW_COLOURS.map(([c, n]) => `<button data-glow="${c}" aria-pressed="${u.glow === c}" title="${n}" class="gsw" style="--g:${c}"></button>`).join('')}</div>
@@ -2678,6 +2688,18 @@ function animate() {
 
 // ---------------------------------------------------------------- panel UI
 let toastTimer;
+// links to the official rules site open in a new tab; where the page may not open one, the address is copied instead
+document.addEventListener('click', e => {
+	const a = e.target.closest('a.rulesite'); if (!a) return;
+	e.preventDefault();
+	let w = null;
+	try { w = window.open(a.href, '_blank'); if (w) w.opener = null; } catch { }
+	if (!w) {
+		const url = a.href;
+		try { navigator.clipboard.writeText(url).then(() => toast('Can’t open a new tab from here. The rules site address is copied: paste it into your browser.'), () => toast('Open the rules site in your browser: ' + url)); }
+		catch { toast('Open the rules site in your browser: ' + url); }
+	}
+});
 function toast(msg) {
 	const t = $('#toast');
 	t.innerHTML = msg; t.hidden = false;
