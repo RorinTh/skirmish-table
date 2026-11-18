@@ -326,7 +326,8 @@ table.wt tr.up td { background: color-mix(in srgb, var(--tape) 6%, transparent);
 .md h4 { margin-top: 10px; }
 mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 #cardList li .nm, #rulesList li .nm { white-space: normal; }
-.hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+/* pinned to the corner of the window: placed where they sit in a scrolled panel they made the whole page scroll */
+.hidden-file { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
 
 /* narrower screens: board and play panel side by side, setup underneath */
 @media (max-width: 1240px) {
