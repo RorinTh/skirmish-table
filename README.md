@@ -8,7 +8,7 @@ There is nothing to build or install: `index.html` is the game, and `p2p.js` add
 
 ## Card library
 
-No game cards ship with the page. If you have your own card library file (`skirmish-library.json`), load it under **Table & save** and the page matches units to their cards. Health, Shield and Coherency are then filled in from the card. For units without a card, type Health and Shield once on the unit card and the page remembers them for that unit type.
+No game cards ship with the page. If you have your own card library file (`skirmish-library.json`), load it under **Table & save** and the page matches units to their cards. Health, Shield and Coherency are then filled in from the card, and a unit's supply follows the card's models/supply table: as models are removed or destroyed, the unit counts the supply for the models it has left. For units without a card, type Health and Shield once on the unit card and the page remembers them for that unit type.
 
 ## Online play
 

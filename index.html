@@ -1568,7 +1568,7 @@ function setDamage(m, key, delta) {
 	if (v === (m[key] || 0)) return;
 	undoStack.push({ t: 'dmg', items: [{ id: m.id, dmgH: m.dmgH || 0, dmgS: m.dmgS || 0 }] });
 	m[key] = v;
-	refreshFace(objs.get(m.id)); renderCard(); save();
+	refreshFace(objs.get(m.id)); renderLists(); renderCard(); save();
 	if (key === 'dmgH' && v === max) toast(`${m.name} is destroyed: Remove takes it off the table`);
 }
 function rechargeShields(m) {
@@ -2401,7 +2401,7 @@ function unitRowHtml(m, extra) {
 			<button id="cardSupMinus" aria-label="Lower unit supply">−</button>
 			<span class="supval">${u.supply}<small>supply</small></span>
 			<button id="cardSupPlus" aria-label="Raise unit supply">+</button>
-		</span>${u.card && libCard(u.card) ? '<button class="btn" id="cardOpen">Card</button>' : ''}<a class="btn rulesite" href="https://sc.starcraft-tmg.com/" target="_blank" rel="noopener noreferrer" title="The official StarCraft TMG rules and unit cards (sign in as a guest, then Factions &amp; Cards)">Rules ↗</a>${extra}
+		</span>${u.id && unitSupply(u) < u.supply ? `<span class="note" title="From the card's models / supply table, for the models still alive">now ${unitSupply(u)} (${aliveModels(u).length} left)</span>` : ''}${u.card && libCard(u.card) ? '<button class="btn" id="cardOpen">Card</button>' : ''}<a class="btn rulesite" href="https://sc.starcraft-tmg.com/" target="_blank" rel="noopener noreferrer" title="The official StarCraft TMG rules and unit cards (sign in as a guest, then Factions &amp; Cards)">Rules ↗</a>${extra}
 		${LIB ? `<label class="row cardmatch"><span class="note">Card</span><select id="cardMatch" aria-label="Card for this unit">${unitCardOptions(u.card)}</select></label>` : ''}
 		<div class="row cardmatch glowpick" role="group" aria-label="Unit glow"><span class="note">Glow</span>
 			<button data-glow="" aria-pressed="${!u.glow}" title="No glow" class="gsw none">✕</button>${GLOW_COLOURS.map(([c, n]) => `<button data-glow="${c}" aria-pressed="${u.glow === c}" title="${n}" class="gsw" style="--g:${c}"></button>`).join('')}</div>
@@ -2437,7 +2437,7 @@ function bindUnitRow(m) {
 		u[key] = v === '' ? null : clampN(v, 0, 99, 0) | 0;
 		rememberStats(u);
 		for (const x of unitModels(m)) { const st = statsOf(x.unit); x.dmgH = Math.min(x.dmgH || 0, st.hp); x.dmgS = Math.min(x.dmgS || 0, st.sh); refreshFace(objs.get(x.id)); }
-		renderCard(); save();
+		renderLists(); renderCard(); save();
 	});
 	$('#cardCoh')?.addEventListener('change', e => {
 		const u = ensureUnit(m); u.coh = e.target.value ? Number(e.target.value) : null;
@@ -2569,7 +2569,7 @@ function undo() {
 		syncRanges(); updateMeasure();
 	} else if (a.t === 'dmg') {
 		for (const p of a.items) { const m = findMini(p.id); if (m) { m.dmgH = p.dmgH; m.dmgS = p.dmgS; refreshFace(objs.get(m.id)); } }
-		renderCard();
+		renderLists(); renderCard();
 	} else if (a.t === 'moves') {    // a whole unit's move
 		for (const p of a.items) { const m = findMini(p.id); if (m) { m.x = p.from.x; m.z = p.from.z; objs.get(m.id)?.g.position.set(m.x, 0, m.z); } }
 		syncRanges(); updateMeasure();
@@ -2786,7 +2786,7 @@ function renderLists() {
 		const body = order.map(uid => {
 			const members = ms.filter(m => m.unit === uid), u = findUnit(uid) || { name: baseName(members[0].name), supply: 0 };
 			if (members.length === 1) return row(members[0], false);
-			return `<li class="unit-h" data-unit="${uid}"><b>${esc(u.name)}</b> · ${members.length} models<span class="mm">${u.supply} supply</span></li>` + members.map(m => row(m, true)).join('');
+			return `<li class="unit-h" data-unit="${uid}"><b>${esc(u.name)}</b> · ${members.length} models<span class="mm">${u.id ? unitSupply(u) : u.supply} supply</span></li>` + members.map(m => row(m, true)).join('');
 		}).join('');
 		return `<div class="group-h"><span class="swatch" style="background:${p.color}"></span>${esc(p.name)} · ${ms.length} models · ${order.length} units</div><ul class="ulist">${body}</ul>`;
 	}).join('');
@@ -2795,6 +2795,24 @@ function renderLists() {
 	renderSupply();
 	renderReserves();
 }
+// models of a unit still in play: on the table or in reserves, and not destroyed (Health 0)
+function aliveModels(u) {
+	return state.minis.filter(m => m.unit === u.id && !(m.dmgH && healthOf(m).hp && healthOf(m).h === 0));
+}
+// supply a unit counts now: with a card, its models / supply band for the models still alive (below the smallest
+// band, the smallest band's supply), never more than the supply set on the unit; without a card, the unit's supply
+function unitSupply(u) {
+	const c = libCard(u.card);
+	if (!c?.modelsSupply?.length) return u.supply;
+	const n = aliveModels(u).length;
+	if (!n) return 0;
+	let s = supplyFor(c, n);
+	if (s == null) {
+		const lo = /(\d+)/.exec(c.modelsSupply[0].models);
+		s = lo && n < +lo[1] ? c.modelsSupply[0].supply : c.modelsSupply[c.modelsSupply.length - 1].supply;
+	}
+	return u.supply > 0 ? Math.min(u.supply, s) : s;
+}
 // supply on the table: each unit with at least one model left counts its supply once
 function supplyUnits(i) {
 	const ids = new Set(state.minis.filter(m => m.player === i && !m.reserve).map(m => m.unit));   // reserves do not count
@@ -2802,12 +2820,12 @@ function supplyUnits(i) {
 }
 function renderSupply() {
 	for (const i of [0, 1]) {
-		const us = supplyUnits(i), total = Math.min(99, us.reduce((s, u) => s + u.supply, 0));
+		const us = supplyUnits(i), total = Math.min(99, us.reduce((s, u) => s + unitSupply(u), 0));
 		const el = $('#supply' + i), avail = state.score?.avail || 0;
 		el.style.setProperty('--pc', state.players[i].color);
 		el.classList.toggle('over', avail > 0 && total > avail);   // more on the table than is available
 		el.querySelector('.digits').textContent = String(total).padStart(2, '0');
-		const parts = us.filter(u => u.supply > 0).map(u => `${u.name} ${u.supply}`);
+		const parts = us.filter(u => unitSupply(u) > 0).map(u => `${u.name} ${unitSupply(u)}` + (unitSupply(u) < u.supply ? ` (of ${u.supply})` : ''));
 		el.title = `${state.players[i].name}: ${total} supply on the table` + (avail ? ` of ${avail} available` : '') + (parts.length ? '\n' + parts.join('\n') : '');
 		el.setAttribute('aria-label', `${state.players[i].name}: ${total} supply on the table`);
 	}
@@ -2897,11 +2915,11 @@ function renderReserves() {
 		for (const m of ms) if (!order.includes(m.unit)) order.push(m.unit);
 		// supply waiting in reserves: shown here, not counted in the supply on the table at the top.
 		// A unit with models both on the table and in reserves already counts on the table, so it is left out here.
-		const resSup = order.map(findUnit).filter(u => u && !state.minis.some(m => m.unit === u.id && !m.reserve)).reduce((s, u) => s + u.supply, 0);
+		const resSup = order.map(findUnit).filter(u => u && !state.minis.some(m => m.unit === u.id && !m.reserve)).reduce((s, u) => s + unitSupply(u), 0);
 		box.innerHTML = `<div class="rhead"><b>Reserves</b> <span class="note">${esc(state.players[i].name)} · ${ms.length ? `${plural(order.length, 'unit')}, ${plural(ms.length, 'model')} · ${resSup} sup` : 'empty'}</span></div>
 			<div class="rbody">${ms.length ? order.map(uid => {
 				const um = ms.filter(m => m.unit === uid), u = findUnit(uid) || { name: baseName(um[0].name), supply: 0 };
-				return `<div class="runit"><div class="ruh" data-drag-unit="${uid}" data-p="${i}" title="Drag the whole unit onto the table">⠿ <b>${esc(u.name)}</b><span class="mm">${um.length}× · ${u.supply} sup</span></div>
+				return `<div class="runit"><div class="ruh" data-drag-unit="${uid}" data-p="${i}" title="Drag the whole unit onto the table">⠿ <b>${esc(u.name)}</b><span class="mm">${um.length}× · ${u.id ? unitSupply(u) : u.supply} sup</span></div>
 					<div class="rmodels">${um.map(m => `<span data-drag-mini="${m.id}" title="${esc(m.name)}: drag onto the table">${thumbHtml(m)}</span>`).join('')}</div></div>`;
 			}).join('') : '<p class="note" style="margin:6px 2px">New models from Add miniatures, a card or an army list wait here. Drag them onto the table to deploy them.</p>'}</div>`;
 	}
@@ -3619,6 +3637,7 @@ async function initLibrary() {
 function renderLibrary() {
 	const on = !!LIB;
 	refreshAllFaces();   // damage numbers on the bases need the cards' Health and Shield
+	renderSupply(); renderReserves();   // and supply follows the cards' models / supply tables
 	$('#libStatus').textContent = on
 		? `${LIB.title}: ${LIB.cards.length} cards` + (LIB.rules.docs.length ? ` and ${LIB.rules.docs.map(d => `${d.title} (${d.pages.length} pages)`).join(', ')}` : '') + '. Kept in this browser.'
 		: LIB_DEFAULT_NOTE;
