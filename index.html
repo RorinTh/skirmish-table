@@ -898,8 +898,13 @@ function normTerrain(t) {
 const SCORE_CATS = [['sd', 'Supply destroyed'], ['ms', 'Mission scoring']];
 function normScore(sc) {
 	const grid = src => [0, 1].map(i => Array.from({ length: 9 }, (_, r) => clampN(src?.[i]?.[r], 0, 99, 0) | 0));
-	return { round: clampN(sc?.round, 1, 9, 1) | 0, sd: grid(sc?.sd), ms: grid(sc?.ms ?? sc?.pts),
-		avail: clampN(sc?.avail, 0, 99, 0) | 0 };   // available supply, one game-wide counter
+	// sd holds the hand adjustment, which may be negative to take back an automatic count
+	const adj = src => [0, 1].map(i => Array.from({ length: 9 }, (_, r) => clampN(src?.[i]?.[r], -99, 99, 0) | 0));
+	// kills: supply a unit lost, credited to the other player in the round it happened (u unit, p scorer, r round index, s supply)
+	const kills = (Array.isArray(sc?.kills) ? sc.kills : []).slice(-300).map(k => ({ u: String(k?.u || '').slice(0, 40), p: k?.p === 1 ? 1 : 0,
+		r: clampN(k?.r, 0, 8, 0) | 0, s: clampN(k?.s, 0, 99, 0) | 0 })).filter(k => k.u && k.s);
+	return { round: clampN(sc?.round, 1, 9, 1) | 0, sd: adj(sc?.sd), ms: grid(sc?.ms ?? sc?.pts),
+		avail: clampN(sc?.avail, 0, 99, 0) | 0, kills };   // available supply, one game-wide counter
 }
 // chess clock: minutes each, time left per player (ms) as of `since`, and the running side (null = paused)
 const CLOCK_MIN = 75;
@@ -921,8 +926,49 @@ function persistable() {
 	if (!moves.size) return state;
 	return { ...state, minis: state.minis.map(m => { const mv = moves.get(m.id); return mv ? { ...m, x: mv.points[0].x, z: mv.points[0].z } : m; }) };
 }
+// what each unit that has been on the table had last time: living models (n) and supply (s), and its side (p)
+const held = new Map();
+let remoteApplying = false, lastKillMsg = '';   // changes from the other player: they count their own kills
+function tallyLosses(credit) {
+	if (!state?.units || !state.score) return;
+	const round = state.score.round - 1, gained = [];
+	let takenBack = false;
+	const step = (id, h, n, s, name) => {
+		if (credit && n < h.n && s < h.s) {
+			state.score.kills.push({ u: id, p: 1 - h.p, r: round, s: h.s - s });
+			if (state.score.kills.length > 300) state.score.kills.splice(0, state.score.kills.length - 300);
+			gained.push([1 - h.p, h.s - s, name]);
+		} else if (credit && n > h.n && s > h.s) {
+			let back = s - h.s;   // models back (undo): their kills are taken back, latest first
+			for (let k = state.score.kills.length - 1; k >= 0 && back > 0; k--) {
+				const x = state.score.kills[k];
+				if (x.u !== id) continue;
+				const t = Math.min(back, x.s); x.s -= t; back -= t;
+				if (!x.s) state.score.kills.splice(k, 1);
+				takenBack = true;
+			}
+		}
+		h.n = n; h.s = s; if (name) h.name = name;
+	};
+	const seen = new Set();
+	for (const u of state.units) {
+		seen.add(u.id);
+		const n = aliveModels(u).length, s = n ? unitSupply(u) : 0, h = held.get(u.id);
+		if (h) { h.p = u.player; step(u.id, h, n, s, u.name); }
+		else if (state.minis.some(m => m.unit === u.id && !m.reserve)) held.set(u.id, { p: u.player, n, s, name: u.name });
+	}
+	// a unit with no models left is gone from the board; it is kept here so an undo can take its kill back
+	for (const [id, h] of held) if (!seen.has(id) && h.n) step(id, h, 0, 0, null);
+	lastKillMsg = gained.map(([p, v]) => `${esc(state.players[p].name)} scores ${v} supply destroyed`).join(', ');
+	if (takenBack && !gained.length) renderScore();
+	if (gained.length) {
+		renderScore();
+		for (const [p, v, name] of gained) toast(`${esc(state.players[p].name)} scores ${v} supply destroyed (${esc(name || 'unit')}), round ${round + 1}`);
+	}
+}
 let saveTimer, storageWarned = false;
 function save() {
+	if (!remoteApplying) tallyLosses(true); else tallyLosses(false);
 	clearTimeout(saveTimer);
 	saveTimer = setTimeout(() => {
 		if (net.code) { syncNet(); return; }      // online: the shared game is the record, the local board is left alone
@@ -1569,7 +1615,7 @@ function setDamage(m, key, delta) {
 	undoStack.push({ t: 'dmg', items: [{ id: m.id, dmgH: m.dmgH || 0, dmgS: m.dmgS || 0 }] });
 	m[key] = v;
 	refreshFace(objs.get(m.id)); renderLists(); renderCard(); save();
-	if (key === 'dmgH' && v === max) toast(`${m.name} is destroyed: Remove takes it off the table`);
+	if (key === 'dmgH' && v === max) toast(`${esc(m.name)} is destroyed` + (lastKillMsg ? `: ${lastKillMsg}` : ': Remove takes it off the table'));
 }
 function rechargeShields(m) {
 	const ms = unitModels(m).filter(x => x.dmgS);
@@ -3215,7 +3261,7 @@ function loadFromText(txt) {
 }
 $('#loadText').addEventListener('click', () => loadFromText($('#stateText').value));
 $('#loadFile').addEventListener('change', async e => { const f = e.target.files[0]; if (f) loadFromText(await f.text()); e.target.value = ''; });
-armed($('#clearTable'), () => { clearMoves(); state.minis.forEach(m => removeObj(m.id)); state.terrain.forEach(t => removeObj(t.id)); state.minis = []; state.terrain = []; state.example = false; undoStack.length = 0; select(null); measure = null; updateMeasure(); renderLists(); save(); toast('Table cleared'); });
+armed($('#clearTable'), () => { clearMoves(); state.minis.forEach(m => removeObj(m.id)); state.terrain.forEach(t => removeObj(t.id)); state.minis = []; state.terrain = []; state.example = false; undoStack.length = 0; held.clear(); select(null); measure = null; updateMeasure(); renderLists(); save(); toast('Table cleared'); });
 armed($('#resetExample'), () => { applyState(exampleState()); save(); toast('Example board loaded'); });
 
 // ---------------------------------------------------------------- dice
@@ -3439,8 +3485,11 @@ window.addEventListener('keydown', e => {
 // ---------------------------------------------------------------- score and round
 const scorePop = $('#scorePop');
 let scorePinned = false;
-const roundTotal = (i, r) => state.score.sd[i][r] + state.score.ms[i][r];
-const catTotal = (c, i) => state.score[c][i].reduce((a, b) => a + b, 0);
+// Supply destroyed in a round: what the other side's units lost then, plus the hand adjustment
+const autoSd = (i, r) => state.score.kills.reduce((a, k) => a + (k.p === i && k.r === r ? k.s : 0), 0);
+const cellVal = (c, i, r) => c === 'sd' ? Math.max(0, Math.min(99, autoSd(i, r) + state.score.sd[i][r])) : state.score[c][i][r];
+const roundTotal = (i, r) => cellVal('sd', i, r) + cellVal('ms', i, r);
+const catTotal = (c, i) => Array.from({ length: 9 }, (_, r) => cellVal(c, i, r)).reduce((a, b) => a + b, 0);
 const scoreTotal = i => Math.min(99, catTotal('sd', i) + catTotal('ms', i));
 // ---- chess clock
 const clockLeft = i => { const c = state.clock; return c.rem[i] - (c.active === i ? Date.now() - c.since : 0); };
@@ -3522,8 +3571,8 @@ function renderScore() {
 function renderScorePop() {
 	const sc = state.score, p = state.players;
 	let last = sc.round;
-	for (const [c] of SCORE_CATS) sc[c].forEach(row => row.forEach((v, r) => { if (v) last = Math.max(last, r + 1); }));
-	const cell = (c, label, i, r) => `<td><span class="mini"><button data-c="${c}" data-p="${i}" data-r="${r}" data-d="-1" aria-label="${esc(p[i].name)} round ${r + 1} ${label} minus one">−</button><b>${sc[c][i][r]}</b><button data-c="${c}" data-p="${i}" data-r="${r}" data-d="1" aria-label="${esc(p[i].name)} round ${r + 1} ${label} plus one">+</button></span></td>`;
+	for (const [c] of SCORE_CATS) for (const i of [0, 1]) for (let r = 0; r < 9; r++) if (cellVal(c, i, r)) last = Math.max(last, r + 1);
+	const cell = (c, label, i, r) => `<td><span class="mini"><button data-c="${c}" data-p="${i}" data-r="${r}" data-d="-1" aria-label="${esc(p[i].name)} round ${r + 1} ${label} minus one">−</button><b${c === 'sd' && autoSd(i, r) ? ` title="${autoSd(i, r)} counted from units lost${sc.sd[i][r] ? `, ${sc.sd[i][r] > 0 ? '+' : ''}${sc.sd[i][r]} by hand` : ''}"` : ''}>${cellVal(c, i, r)}</b><button data-c="${c}" data-p="${i}" data-r="${r}" data-d="1" aria-label="${esc(p[i].name)} round ${r + 1} ${label} plus one">+</button></span></td>`;
 	const side = (i, r) => SCORE_CATS.map(([c, label]) => cell(c, label, i, r)).join('') + `<td class="rt">${roundTotal(i, r)}</td>`;
 	const rows = Array.from({ length: last }, (_, r) => `<tr class="${r + 1 === sc.round ? 'cur' : ''}"><th>${r + 1}</th>${side(0, r)}${side(1, r)}</tr>`).join('');
 	const t0 = scoreTotal(0), t1 = scoreTotal(1);
@@ -3543,6 +3592,7 @@ function renderScorePop() {
 			<tfoot><tr><th>Total</th>${foot(0)}${foot(1)}</tr></tfoot>
 		</table>
 		</div>
+		<p class="note" style="margin:0 0 6px">Supply destroyed counts itself: when a unit loses models (removed, or Health down to 0), the other player scores the supply it lost, in the current round. Use − and + to correct it.</p>
 		<div class="row" style="flex-wrap:nowrap"><span class="note" style="flex:1;min-width:0">${lead} · round ${sc.round} of the game</span><button class="btn danger" id="scoreReset" style="min-width:84px">Reset</button></div>`;
 	armed($('#scoreReset'), () => { state.score = normScore(null); renderScore(); save(); toast('Scores, round and available supply reset'); }, 'Confirm?');
 	$('#score0').setAttribute('aria-expanded', 'true');
@@ -3563,7 +3613,8 @@ document.addEventListener('pointerdown', e => { if (scorePinned && !e.target.clo
 scorePop.addEventListener('click', e => {
 	const b = e.target.closest('button[data-p]'); if (!b) return;
 	const i = +b.dataset.p, r = +b.dataset.r, c = b.dataset.c === 'sd' ? 'sd' : 'ms';
-	state.score[c][i][r] = Math.max(0, Math.min(99, state.score[c][i][r] + +b.dataset.d));
+	if (c === 'sd') { const a = autoSd(i, r); state.score.sd[i][r] = Math.max(-a, Math.min(99 - a, state.score.sd[i][r] + +b.dataset.d)); }
+	else state.score[c][i][r] = Math.max(0, Math.min(99, state.score[c][i][r] + +b.dataset.d));
 	renderScore(); save();
 });
 function setCounter(key, v, lo, hi) { state.score[key] = Math.max(lo, Math.min(hi, v)); renderScore(); save(); }
@@ -3943,7 +3994,7 @@ function pieceDoc(it, kind) {
 		? { kind, name: it.name, player: it.player, baseMm: it.baseMm, img: it.img, x: r3(it.x), z: r3(it.z), unit: it.unit, reserve: it.reserve, dmgH: it.dmgH || 0, dmgS: it.dmgS || 0 }
 		: { kind, w: it.w, d: it.d, h: it.h, x: r3(it.x), z: r3(it.z), rot: r3(it.rot), name: it.name, shape: it.shape, cls: it.cls };
 }
-function metaDoc(s) { return { table: { w: s.table.w, d: s.table.d, mat: s.table.mat, deploy: s.table.deploy, lockTerrain: s.table.lockTerrain }, tactics: s.tactics, players: s.players.map(p => ({ name: p.name, color: p.color })), score: { round: s.score.round, sd: s.score.sd, ms: s.score.ms, avail: s.score.avail }, clock: s.clock }; }
+function metaDoc(s) { return { table: { w: s.table.w, d: s.table.d, mat: s.table.mat, deploy: s.table.deploy, lockTerrain: s.table.lockTerrain }, tactics: s.tactics, players: s.players.map(p => ({ name: p.name, color: p.color })), score: { round: s.score.round, sd: s.score.sd, ms: s.score.ms, avail: s.score.avail, kills: s.score.kills }, clock: s.clock }; }
 function seatName(s) { return s === 0 || s === 1 ? state.players[s].name : 'Spectator'; }
 function newCode() { const a = 'abcdefghjkmnpqrstuvwxyz23456789', b = new Uint8Array(6); crypto.getRandomValues(b); return [...b].map(x => a[x % a.length]).join(''); }
 
@@ -4021,12 +4072,16 @@ async function joinGame(code, create) {
 			net.loaded = true; clearTimeout(timer); setNetStatus('');
 			return;
 		}
-		for (const ch of snap.docChanges()) {
-			if (ch.doc.metadata.hasPendingWrites) continue;      // our own write coming back
-			if (ch.type === 'removed') removeRemotePiece(ch.doc.id);
-			else applyRemotePiece(ch.doc.id, ch.doc.data());
-		}
-		afterRemote();
+		remoteApplying = true;
+		try {
+			for (const ch of snap.docChanges()) {
+				if (ch.doc.metadata.hasPendingWrites) continue;      // our own write coming back
+				if (ch.type === 'removed') removeRemotePiece(ch.doc.id);
+				else applyRemotePiece(ch.doc.id, ch.doc.data());
+			}
+			afterRemote();
+			tallyLosses(false);
+		} finally { remoteApplying = false; }
 	}, netError));
 	net.unsubs.push(rollsCol().orderBy('ts', 'desc').limit(20).onSnapshot(onRolls, netError));
 	if (net.roomNS) {
@@ -4257,6 +4312,7 @@ function applyState(s) {
 	renderPlayers(); renderAddPlayer(); renderLists(); syncTableInputs(); renderScore(); renderMatPick(); renderTactics();
 	select(null); updateMeasure();
 	fitView();
+	held.clear(); tallyLosses(false);
 }
 function start(hot) {
 	W = Math.max(1, viewportEl.clientWidth); H = Math.max(1, viewportEl.clientHeight);
