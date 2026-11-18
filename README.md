@@ -4,7 +4,7 @@ A browser table for playing a tabletop miniatures skirmish game on one screen: a
 
 **Play it:** https://rorinth.github.io/skirmish-table/
 
-It is one file, `index.html`, with nothing to build or install. Open it from GitHub Pages, or download it and open it in a browser. Your board is saved in that browser.
+There is nothing to build or install: `index.html` is the game, and `p2p.js` adds online play. Your board is saved in your browser.
 
 ## Card library
 
@@ -12,7 +12,13 @@ No game cards ship with the page. If you have your own card library file (`skirm
 
 ## Online play
 
-This version is for two players on one screen. Online play between two browsers is only in the claude.ai version of the page.
+Under **Online game**, choose **Start online game with this board** and send the other player the link (**Copy link**). They need no account.
+
+- The player who starts the game hosts it. Their browser keeps the game and passes every change to the other players, so **the host keeps the tab open**. If the host reloads or comes back later in the same browser, the game continues where it was and the others reconnect on their own.
+- The browsers connect directly to each other (WebRTC, through [PeerJS](https://peerjs.com/)). PeerJS's free public service only introduces them; the game itself doesn't go through it.
+- Some strict networks (some company, school or mobile networks) block direct connections. Players behind one can't join.
+- Anyone who has the link or the code can join and change the board.
+- Spectators can watch too: they join and pick **Spectator**.
 
 ## Disclaimer
 

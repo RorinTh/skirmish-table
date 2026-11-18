@@ -1,4 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}[hidden]{display:none!important}</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="p2p.js"></script>
 <title>Skirmish Table</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -394,9 +396,9 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 		<section class="box" id="onlineBox" aria-labelledby="onlineH">
 			<h2 id="onlineH">Online game</h2>
 			<p class="note" id="onlineChecking">Checking whether online play is available…</p>
-			<p class="note" id="onlineNA" hidden>Online play is not part of this version: both players share one screen. Your board is saved in this browser.</p>
+			<p class="note" id="onlineNA" hidden>Online play could not start: the connection library did not load. Check your internet connection and reload. You can still play on one screen.</p>
 			<div class="tabpanel" id="onlineOff" hidden>
-				<p class="note">Play this board with someone else live. Start a game and send them the code, or join with theirs.</p>
+				<p class="note">Play this board with someone else live. Start a game and send them the link, or join with their code. Whoever starts the game hosts it: keep that tab open while you play.</p>
 				<button class="btn primary" id="netCreate">Start online game with this board</button>
 				<div class="row" style="flex-wrap:nowrap">
 					<input type="text" id="netCode" placeholder="Game code" maxlength="12" autocomplete="off" aria-label="Game code">
@@ -406,7 +408,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 			<div class="tabpanel" id="onlineOn" hidden>
 				<div class="row">
 					<span class="gamecode" id="netCodeShow"></span>
-					<button class="btn" id="netCopy">Copy code</button>
+					<button class="btn" id="netCopy">Copy link</button>
 					<button class="btn danger" id="netLeave" style="margin-left:auto">Leave</button>
 				</div>
 				<div class="field">
@@ -3887,6 +3889,7 @@ function handleWriteError(e) {
 	else toast('A change did not reach the online game. Check your connection.');
 	renderOnline();
 }
+if (window.p2p) window.p2p.onStatus = t => { if (net.code) setNetStatus(t); };
 function netError() { setNetStatus('The connection to the game was lost. Leave and join again.'); }
 function setNetStatus(t) { net.status = t; renderOnline(); }
 
@@ -3896,7 +3899,8 @@ async function joinGame(code, create) {
 	if (!CODE_RE.test(code)) { toast('A game code is 4 to 12 letters and digits.'); return; }
 	leaveGame(true);
 	Object.assign(net, { code, loaded: false, metaLoaded: false, rollsLoaded: false, readOnly: false, synced: new Map(), metaSynced: '', peers: [], rd: new Map(), status: 'Connecting…' });
-	net.seat = readSeat(code, create ? 0 : 1);
+	window.p2p?.begin(code, create);
+	net.seat = readSeat(code, create || window.p2p?.isHost() ? 0 : 1);
 	if (net.seat < 2) { addPlayer = net.seat; renderAddPlayer(); }
 	dice.history = []; dice.cur = null; dice.lastId = null; renderDice(); renderRoller();
 	try { if (location.hash !== '#' + code) location.hash = code; } catch { }
@@ -3952,6 +3956,7 @@ async function joinGame(code, create) {
 }
 function leaveGame(quiet) {
 	if (!net.code) return;
+	window.p2p?.end();
 	net.unsubs.forEach(u => { try { u(); } catch { } });
 	net.unsubs = [];
 	try { net.nroom?.leave().catch(() => { }); } catch { }
@@ -4122,15 +4127,15 @@ function renderOnline() {
 	$('#netNameWrap').hidden = net.seat > 1;
 	if (net.seat < 2 && document.activeElement?.id !== 'netName') $('#netName').value = state.players[net.seat].name;
 	const others = net.peers.filter(p => !p.sameTab);
-	$('#netPeers').textContent = !net.nroom ? '' : others.length ? 'Also here: ' + others.map(p => seatName(p.presence?.seat)).join(', ') : 'Nobody else is here yet. Send them the code.';
+	$('#netPeers').textContent = !net.nroom ? '' : others.length ? 'Also here: ' + others.map(p => seatName(p.presence?.seat)).join(', ') : 'Nobody else is here yet. Send them the link.';
 	$('#netStatus').textContent = net.readOnly ? 'You can watch but not change this game.' : net.status;
 }
 $('#netCreate').addEventListener('click', () => joinGame(newCode(), true));
 $('#netJoin').addEventListener('click', () => joinGame($('#netCode').value, false));
 $('#netCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('#netJoin').click(); });
 $('#netCopy').addEventListener('click', () => {
-	const c = net.code.toUpperCase();
-	try { navigator.clipboard.writeText(c).then(() => toast('Game code copied'), () => toast('Game code: ' + c)); } catch { toast('Game code: ' + c); }
+	const c = location.origin + location.pathname + '#' + net.code;
+	try { navigator.clipboard.writeText(c).then(() => toast('Link copied: send it to the other player'), () => toast('Game link: ' + c)); } catch { toast('Game link: ' + c); }
 });
 $('#netLeave').addEventListener('click', () => { leaveGame(false); toast('You left the online game. Your own board is back.'); });
 $('#netSeat').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setSeat(+b.dataset.s); });
