@@ -2894,7 +2894,10 @@ function renderReserves() {
 		box.style.setProperty('--pc', state.players[i].color);
 		const order = [];
 		for (const m of ms) if (!order.includes(m.unit)) order.push(m.unit);
-		box.innerHTML = `<div class="rhead"><b>Reserves</b> <span class="note">${esc(state.players[i].name)} · ${ms.length ? `${plural(order.length, 'unit')}, ${plural(ms.length, 'model')}` : 'empty'}</span></div>
+		// supply waiting in reserves: shown here, not counted in the supply on the table at the top.
+		// A unit with models both on the table and in reserves already counts on the table, so it is left out here.
+		const resSup = order.map(findUnit).filter(u => u && !state.minis.some(m => m.unit === u.id && !m.reserve)).reduce((s, u) => s + u.supply, 0);
+		box.innerHTML = `<div class="rhead"><b>Reserves</b> <span class="note">${esc(state.players[i].name)} · ${ms.length ? `${plural(order.length, 'unit')}, ${plural(ms.length, 'model')} · ${resSup} sup` : 'empty'}</span></div>
 			<div class="rbody">${ms.length ? order.map(uid => {
 				const um = ms.filter(m => m.unit === uid), u = findUnit(uid) || { name: baseName(um[0].name), supply: 0 };
 				return `<div class="runit"><div class="ruh" data-drag-unit="${uid}" data-p="${i}" title="Drag the whole unit onto the table">⠿ <b>${esc(u.name)}</b><span class="mm">${um.length}× · ${u.supply} sup</span></div>
@@ -3614,6 +3617,7 @@ async function initLibrary() {
 }
 function renderLibrary() {
 	const on = !!LIB;
+	refreshAllFaces();   // damage numbers on the bases need the cards' Health and Shield
 	$('#libStatus').textContent = on
 		? `${LIB.title}: ${LIB.cards.length} cards` + (LIB.rules.docs.length ? ` and ${LIB.rules.docs.map(d => `${d.title} (${d.pages.length} pages)`).join(', ')}` : '') + '. Kept in this browser.'
 		: LIB_DEFAULT_NOTE;
