@@ -102,6 +102,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .clockpop[hidden] { display: none; }
 .ctxmenu { position: fixed; z-index: 60; min-width: 190px; background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.45); display: flex; flex-direction: column; }
 .ctxmenu[hidden] { display: none; }
+.ctxmenu .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; }
+.ctxmenu button[disabled] { opacity: .45; cursor: default; }
 .ctxmenu .ctxh { font-size: 11px; color: var(--muted); padding: 4px 8px 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
 .ctxmenu button { background: none; border: 0; color: var(--fg); text-align: left; padding: 7px 10px; border-radius: 5px; cursor: pointer; font-size: 13px; }
 .ctxmenu button:hover, .ctxmenu button:focus-visible { background: var(--bg); outline: none; }
@@ -811,6 +813,7 @@ function normalize(s) {
 			deploy: typeof s.table?.deploy === 'string' && DEPLOYMENTS[s.table.deploy] ? s.table.deploy : null, lockTerrain: s.table?.lockTerrain === true },
 		players: normPlayers(s.players),
 		score: normScore(s.score),
+		ctl: normCtl(s.ctl),
 		clock: normClock(s.clock),
 		tactics: normTactics(s.tactics),
 		...normUnitsAndMinis(s),
@@ -896,6 +899,12 @@ function normTerrain(t) {
 // score: the current round (1-9) and, per player and round, Supply destroyed (sd) and Mission scoring (ms), 0-99 each.
 // Boards saved before the split had one `pts` grid; it is kept as mission scoring.
 const SCORE_CATS = [['sd', 'Supply destroyed'], ['ms', 'Mission scoring']];
+// control of the Mission Markers, by marker number: c who controls it, l who last had more supply on it
+function normCtl(o) {
+	const side = v => v === 0 || v === 1 ? v : null, r = {};
+	for (const n of ['1', '2', '3', '4', '5']) if (o?.[n]) r[n] = { c: side(o[n].c), l: side(o[n].l) };
+	return r;
+}
 function normScore(sc) {
 	const grid = src => [0, 1].map(i => Array.from({ length: 9 }, (_, r) => clampN(src?.[i]?.[r], 0, 99, 0) | 0));
 	// sd holds the hand adjustment, which may be negative to take back an automatic count
@@ -1024,7 +1033,22 @@ el.addEventListener('contextmenu', e => {
 	rightDown = null;
 	if (!still || drag) return;
 	const hit = pick(e);
-	if (hit?.kind !== 'mini') { closeCtx(); return; }
+	if (hit?.kind !== 'mini') {
+		const tp = tablePoint(e), mk = tp && [...markerViz].find(([, v]) => Math.hypot(tp.x - v.px, tp.z - v.pz) <= MARKER_R + 0.4);
+		if (!mk) { closeCtx(); return; }
+		const [n] = mk, k = objectiveCounts().get(n), c = state.ctl[n]?.c ?? null, P = state.players;
+		ctxMenu.innerHTML = `<div class="ctxh">Mission Marker ${n} · ${c === null ? 'no one controls it' : esc(P[c].name) + ' controls it'}</div>
+			<div class="ctxh">Supply on it: ${esc(P[0].name)} ${k.sup[0]}, ${esc(P[1].name)} ${k.sup[1]}</div>
+			${[0, 1].map(i => `<button role="menuitem" data-act="ctl" data-c="${i}" ${c === i ? 'disabled' : ''}><span class="swatch" style="background:${P[i].color}"></span> ${esc(P[i].name)} controls it</button>`).join('')}
+			<button role="menuitem" data-act="ctl" data-c="" ${c === null ? 'disabled' : ''}>No one controls it</button>`;
+		ctxMenu.dataset.id = ''; ctxMenu.dataset.marker = n;
+		ctxMenu.hidden = false;
+		const r = ctxMenu.getBoundingClientRect();
+		ctxMenu.style.left = Math.min(e.clientX, innerWidth - r.width - 8) + 'px';
+		ctxMenu.style.top = Math.min(e.clientY, innerHeight - r.height - 8) + 'px';
+		ctxMenu.querySelector('button:not([disabled])')?.focus();
+		return;
+	}
 	const m = findMini(hit.id); if (!m || m.reserve) return;
 	const n = unitModels(m).filter(x => !x.reserve).length, name = findUnit(m.unit)?.name || m.name;
 	ctxMenu.innerHTML = `<div class="ctxh">${esc(name)}</div>
@@ -1039,6 +1063,12 @@ el.addEventListener('contextmenu', e => {
 });
 ctxMenu.addEventListener('click', e => {
 	const b = e.target.closest('button'); if (!b) return;
+	if (b.dataset.act === 'ctl') {
+		const n = ctxMenu.dataset.marker, c = b.dataset.c === '' ? null : +b.dataset.c; closeCtx();
+		state.ctl[n] = { c, l: state.ctl[n]?.l ?? null }; objSig = ''; save();
+		toast(c === null ? `No one controls Mission Marker ${n}` : `${esc(state.players[c].name)} controls Mission Marker ${n}`);
+		return;
+	}
 	const m = findMini(ctxMenu.dataset.id); closeCtx();
 	if (!m || m.reserve) return;
 	if (b.dataset.act === 'reserve') toReserves(m);
@@ -1100,6 +1130,21 @@ const DEPLOYMENTS = {
 };
 const SIDE = { red: 0xe5484d, blue: 0x3b82f6 }, MARKER_COLOR = { 1: '#e5484d', 3: '#e5484d', 2: '#3b82f6', 4: '#3b82f6', 5: '#34b36a' };
 const MARKER_R = 40 * MM / 2;   // a 40 mm Mission Marker
+const MGLOW_W = 1.1;            // the glow of a controlled marker reaches this far beyond its edge
+const markerViz = new Map();    // marker number -> its glow and supply label on the table
+let objSig = '';                // what the markers showed last time, to redraw only on a change
+let markerGlowTex = null;
+function markerGlowTexture() {
+	if (markerGlowTex) return markerGlowTex;
+	const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S;
+	const x = cv.getContext('2d'), inner = MARKER_R * 0.9 / (MARKER_R + MGLOW_W) * S / 2;
+	const g = x.createRadialGradient(S / 2, S / 2, inner, S / 2, S / 2, S / 2);
+	g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.2, 'rgba(255,255,255,0.9)');
+	g.addColorStop(0.55, 'rgba(255,255,255,0.4)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+	x.fillStyle = g; x.fillRect(0, 0, S, S);
+	markerGlowTex = new THREE.CanvasTexture(cv); markerGlowTex.colorSpace = THREE.SRGBColorSpace;
+	return markerGlowTex;
+}
 function textTexture(text, color, w = 256, h = 72) {
 	const c = document.createElement('canvas'); c.width = w; c.height = h;
 	const x = c.getContext('2d');
@@ -1117,6 +1162,7 @@ function markerTexture(n) {
 }
 // the selected deployment: tinted entry zones with their side's name, and the Mission Markers with their 3" contest ring
 function deploymentGroup() {
+	markerViz.clear(); objSig = '';
 	const g = new THREE.Group(), dep = DEPLOYMENTS[state.table.deploy];
 	if (!dep) return g;
 	const W = state.table.w, D = state.table.d, at = (x, y) => [x - W / 2, y - D / 2];
@@ -1138,6 +1184,15 @@ function deploymentGroup() {
 		const [px, pz] = at(x, y);
 		const disc = new THREE.Mesh(new THREE.CircleGeometry(MARKER_R, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: markerTexture(n) }));
 		disc.position.set(px, 0.02, pz); g.add(disc);
+		const glow = new THREE.Mesh(new THREE.RingGeometry(MARKER_R * 0.9, MARKER_R + MGLOW_W, 72).rotateX(-Math.PI / 2),
+			new THREE.MeshBasicMaterial({ map: markerGlowTexture(), transparent: true, depthWrite: false }));
+		glow.position.set(px, 0.015, pz); glow.visible = false; g.add(glow);
+		const lcv = document.createElement('canvas'); lcv.width = 256; lcv.height = 80;
+		const ltex = new THREE.CanvasTexture(lcv); ltex.colorSpace = THREE.SRGBColorSpace;
+		const label = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6 * 80 / 256).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: ltex, transparent: true, depthWrite: false, depthTest: false }));
+		// just outside the top of the 3" ring, drawn over models and terrain
+		label.position.set(px, 0.03, Math.max(-state.table.d / 2 + 0.5, pz - MARKER_R - 3.6)); label.visible = false; label.renderOrder = 10; g.add(label);
+		markerViz.set(n, { px, pz, glow, label, lcv, ltex });
 		const ring = new THREE.Mesh(new THREE.RingGeometry(MARKER_R + 3 - 0.03, MARKER_R + 3 + 0.03, 96).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: MARKER_COLOR[n], transparent: true, opacity: 0.55, depthWrite: false }));
 		ring.position.set(px, 0.012, pz); g.add(ring);
 	}
@@ -1552,12 +1607,20 @@ function drawFace(cv, m, img, sym) {
 	x.lineWidth = S * 0.014; x.strokeStyle = 'rgba(0,0,0,0.55)';
 	x.beginPath(); x.arc(c, c, ri, 0, 7); x.stroke();
 	drawDamage(x, c, ri, m);
+	const on = contestOf.get(m.id);
+	if (on) {   // contesting a Mission Marker: its number in a gold disc on the right of the base
+		const bx = c + ri * 0.68, br = ri * 0.26;
+		x.beginPath(); x.arc(bx, c, br, 0, 7); x.fillStyle = '#f3c33c'; x.fill();
+		x.lineWidth = ri * 0.05; x.strokeStyle = 'rgba(0,0,0,0.75)'; x.stroke();
+		x.fillStyle = '#10151c'; x.font = `700 ${Math.round(br * 1.35)}px "Chakra Petch", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+		x.fillText(String(on), bx, c + br * 0.08);
+	}
 }
 async function refreshFace(o) {
 	const m = o && findMini(o.id); if (!m) return;
 	const sym = faceMode === 'symbol' ? symbolFor(m) : null;
 	// only redraw when what the face shows has changed
-	const sig = [state.players[m.player].color, sym ? sym.glyph + sym.label : m.img || initials(m.name), dmgSig(m)].join('|');
+	const sig = [state.players[m.player].color, sym ? sym.glyph + sym.label : m.img || initials(m.name), dmgSig(m), contestOf.get(m.id) || ''].join('|');
 	if (o.faceSig === sig) return;
 	o.faceSig = sig;
 	o.sideMat.color.set(state.players[m.player].color).multiplyScalar(0.5);
@@ -2761,8 +2824,63 @@ el.addEventListener('dblclick', e => {
 	const p = tablePoint(e); if (p) sendPing(p.x, p.z);
 });
 
+// A model contests a Mission Marker when its base is within 3" of the marker (the ring); destroyed models do not.
+// Each unit with a model there counts its supply once on that marker.
+const contestOf = new Map();   // model id -> the marker number it contests
+const isDead = m => !!(m.dmgH && healthOf(m).hp && healthOf(m).h === 0);
+function objectiveCounts() {
+	const out = new Map();
+	for (const [n, v] of markerViz) {
+		const units = [new Set(), new Set()], minis = [];
+		for (const m of state.minis) {
+			if (m.reserve || isDead(m)) continue;
+			const pos = objs.get(m.id)?.g.position || m;
+			if (Math.hypot(pos.x - v.px, pos.z - v.pz) - radius(m) - MARKER_R <= 3 + 1e-6) { units[m.player].add(m.unit); minis.push(m.id); }
+		}
+		const sup = units.map(set => [...set].reduce((a, id) => { const u = findUnit(id); return a + (u ? unitSupply(u) : 0); }, 0));
+		out.set(n, { sup, minis, here: units.map(set => set.size > 0) });
+	}
+	return out;
+}
+// Control changes only when one side has more supply on a marker than the other; a tie or an empty marker keeps it.
+// A control set by hand stays until a side newly gets more supply there.
+function updateObjectives() {
+	if (!markerViz.size && !contestOf.size) return;
+	const counts = objectiveCounts(), settled = !drag && !moves.size;
+	let ctlChanged = false;
+	if (settled) for (const [n, k] of counts) {
+		const lead = k.sup[0] > k.sup[1] ? 0 : k.sup[1] > k.sup[0] ? 1 : null, o = state.ctl[n] || { c: null, l: null };
+		if (lead !== o.l) {
+			if (lead !== null && o.c !== lead) { o.c = lead; toast(`${esc(state.players[lead].name)} takes control of Mission Marker ${n}`); }
+			o.l = lead; state.ctl[n] = o; ctlChanged = true;
+		}
+	}
+	const sig = JSON.stringify([...counts].map(([n, k]) => [n, k.sup, k.here, k.minis, state.ctl[n]?.c ?? null])) + state.players.map(p => p.color).join();
+	if (ctlChanged) save();
+	if (sig === objSig) return;
+	objSig = sig;
+	const was = new Map(contestOf); contestOf.clear();
+	for (const [n, k] of counts) {
+		for (const id of k.minis) contestOf.set(id, n);
+		const v = markerViz.get(n), c = state.ctl[n]?.c;
+		v.glow.visible = c === 0 || c === 1;
+		if (v.glow.visible) v.glow.material.color.set(state.players[c].color);
+		v.label.visible = k.here[0] || k.here[1];
+		if (v.label.visible) {
+			const x = v.lcv.getContext('2d'); x.clearRect(0, 0, 256, 80);
+			x.fillStyle = 'rgba(10,13,18,0.82)'; x.beginPath(); x.roundRect(4, 6, 248, 68, 20); x.fill();
+			x.font = '700 46px "Chakra Petch", sans-serif'; x.textBaseline = 'middle'; x.textAlign = 'center';
+			x.fillStyle = state.players[0].color; x.fillText(String(k.sup[0]), 72, 42);
+			x.fillStyle = '#9aa7b8'; x.fillText(':', 128, 40);
+			x.fillStyle = state.players[1].color; x.fillText(String(k.sup[1]), 184, 42);
+			v.ltex.needsUpdate = true;
+		}
+	}
+	for (const id of new Set([...was.keys(), ...contestOf.keys()])) if (was.get(id) !== contestOf.get(id)) refreshFace(objs.get(id));
+}
 function animate() {
 	requestAnimationFrame(animate);
+	updateObjectives();
 	if (pings.length) updatePings(performance.now());
 	controls.update();
 	if (net.code) drawRemote();
@@ -3201,6 +3319,7 @@ function setDeployment(id) {
 	const dep = DEPLOYMENTS[id];
 	if (dep && (dep.w !== state.table.w || dep.d !== state.table.d)) resizeTable(dep.w, dep.d);
 	state.table.deploy = dep ? id : null;
+	state.ctl = {};
 	buildTable(); syncTableInputs(); save();
 	if (dep) toast(`${esc(dep.name)}: ${dep.w}×${dep.d}″ with its entry zones and Mission Markers`);
 }
@@ -3211,7 +3330,7 @@ $('#deploySel').addEventListener('change', e => setDeployment(e.target.value));
 function syncTableInputs() {
 	$('#deploySel').value = state.table.deploy || '';
 	$('#deployNote').textContent = state.table.deploy
-		? 'Coloured areas are each side’s entry edges. Markers 1 and 3 are Red’s, 2 and 4 Blue’s, 5 is neutral; the ring shows the 3″ contest range.' : '';
+		? 'Coloured areas are each side’s entry edges. Markers 1 and 3 are Red’s, 2 and 4 Blue’s, 5 is neutral; the ring shows the 3″ contest range. Models contesting a marker show its number on their base, and the marker shows each side’s supply on it. A side takes control when it has more supply there, and the marker glows in its colour. Right-click a marker to set control by hand.' : '';
 	$('#tableW').value = state.table.w; $('#tableD').value = state.table.d;
 	$('#gridToggle').checked = state.table.grid;
 	$('#terrainMoveToggle').checked = !state.table.lockTerrain;
@@ -3594,7 +3713,7 @@ function renderScorePop() {
 		</div>
 		<p class="note" style="margin:0 0 6px">Supply destroyed counts itself: when a unit loses models (removed, or Health down to 0), the other player scores the supply it lost, in the current round. Use − and + to correct it.</p>
 		<div class="row" style="flex-wrap:nowrap"><span class="note" style="flex:1;min-width:0">${lead} · round ${sc.round} of the game</span><button class="btn danger" id="scoreReset" style="min-width:84px">Reset</button></div>`;
-	armed($('#scoreReset'), () => { state.score = normScore(null); renderScore(); save(); toast('Scores, round and available supply reset'); }, 'Confirm?');
+	armed($('#scoreReset'), () => { state.score = normScore(null); state.ctl = {}; objSig = ''; renderScore(); save(); toast('Scores, round, available supply and objective control reset'); }, 'Confirm?');
 	$('#score0').setAttribute('aria-expanded', 'true');
 	$('#score1').setAttribute('aria-expanded', 'true');
 }
@@ -3994,7 +4113,7 @@ function pieceDoc(it, kind) {
 		? { kind, name: it.name, player: it.player, baseMm: it.baseMm, img: it.img, x: r3(it.x), z: r3(it.z), unit: it.unit, reserve: it.reserve, dmgH: it.dmgH || 0, dmgS: it.dmgS || 0 }
 		: { kind, w: it.w, d: it.d, h: it.h, x: r3(it.x), z: r3(it.z), rot: r3(it.rot), name: it.name, shape: it.shape, cls: it.cls };
 }
-function metaDoc(s) { return { table: { w: s.table.w, d: s.table.d, mat: s.table.mat, deploy: s.table.deploy, lockTerrain: s.table.lockTerrain }, tactics: s.tactics, players: s.players.map(p => ({ name: p.name, color: p.color })), score: { round: s.score.round, sd: s.score.sd, ms: s.score.ms, avail: s.score.avail, kills: s.score.kills }, clock: s.clock }; }
+function metaDoc(s) { return { table: { w: s.table.w, d: s.table.d, mat: s.table.mat, deploy: s.table.deploy, lockTerrain: s.table.lockTerrain }, tactics: s.tactics, players: s.players.map(p => ({ name: p.name, color: p.color })), score: { round: s.score.round, sd: s.score.sd, ms: s.score.ms, avail: s.score.avail, kills: s.score.kills }, ctl: s.ctl, clock: s.clock }; }
 function seatName(s) { return s === 0 || s === 1 ? state.players[s].name : 'Spectator'; }
 function newCode() { const a = 'abcdefghjkmnpqrstuvwxyz23456789', b = new Uint8Array(6); crypto.getRandomValues(b); return [...b].map(x => a[x % a.length]).join(''); }
 
@@ -4127,11 +4246,12 @@ function loadRemoteBoard(docs) {
 }
 function applyRemoteMeta(d) {
 	const remote = { table: { w: clampN(d?.table?.w, 12, 120, state.table.w), d: clampN(d?.table?.d, 12, 120, state.table.d), mat: MATS[d?.table?.mat] ? d.table.mat : state.table.mat, deploy: DEPLOYMENTS[d?.table?.deploy] ? d.table.deploy : null, lockTerrain: d?.table?.lockTerrain === true },
-		tactics: normTactics(d?.tactics), players: normPlayers(d?.players), score: normScore(d?.score), clock: normClock(d?.clock) };
+		tactics: normTactics(d?.tactics), players: normPlayers(d?.players), score: normScore(d?.score), ctl: normCtl(d?.ctl), clock: normClock(d?.clock) };
 	// a local change not yet sent (a score click, a name being typed) wins: it is written next
 	if (net.metaLoaded && JSON.stringify(metaDoc(state)) !== net.metaSynced) { net.metaSynced = JSON.stringify(remote); save(); return; }
 	const w = remote.table.w, dd = remote.table.d, players = remote.players;
 	if (JSON.stringify(remote.score) !== JSON.stringify(state.score)) { state.score = remote.score; renderScore(); }
+	if (JSON.stringify(remote.ctl) !== JSON.stringify(state.ctl)) { state.ctl = remote.ctl; objSig = ''; }
 	if (JSON.stringify(remote.clock) !== JSON.stringify(state.clock)) { state.clock = remote.clock; renderClock(); }
 	if (JSON.stringify(remote.tactics) !== JSON.stringify(state.tactics)) { state.tactics = remote.tactics; renderTactics(); }
 	if (w !== state.table.w || dd !== state.table.d || remote.table.mat !== state.table.mat || remote.table.deploy !== state.table.deploy) {
