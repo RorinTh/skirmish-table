@@ -1666,12 +1666,12 @@ function drawFace(cv, m, img, sym) {
 async function refreshFace(o) {
 	const m = o && findMini(o.id); if (!m) return;
 	if (m.tok && m.tok !== 'shade') {   // a faction token shows its own design over the whole base
-		const sig = 'tok|' + m.tok + '|' + state.players[m.player].color;
+		const tid = m.tok + '@' + m.player, sig = 'tok|' + tid + '|' + tokColor(tokInfo(tid)) + '|' + state.players[m.player].color;
 		if (o.faceSig === sig) return;
 		o.faceSig = sig;
 		o.sideMat.color.set(state.players[m.player].color).multiplyScalar(0.5);
 		const x = o.cv.getContext('2d'); x.clearRect(0, 0, o.cv.width, o.cv.height);
-		await drawTok(x, m.tok, 0, 0, o.cv.width);
+		await drawTok(x, tid, 0, 0, o.cv.width);
 		if (o.faceSig === sig) o.tex.needsUpdate = true;
 		return;
 	}
@@ -3047,22 +3047,55 @@ const TOK_FACTIONS = { P: ['Protoss', '#ffdd1a'], T: ['Terran', '#6f9fd8'], Z: [
 const TOK_INK = '#2b2e31', TOK_STATS = ['SPD', 'ARM', 'EVA', 'HIT', 'ROA', 'RNG'];
 const TOK_SIZE = 25 * MM;   // a 25 mm token, true to scale on the table
 // a token by id: a catalogue entry, or a Buff/Debuff text token "txt:STAT:+2:F"
-function tokInfo(id) {
+const ENEMY_TOKS = new Set(['sword', 'feedback', 'markdeath', 'lock', 'flare', 'seeker', 'carapace', 'executor']);
+for (const c of TOK_CAT) c.tgt = ENEMY_TOKS.has(c.id) || /^txt:[A-Z]+:-/.test(c.id) ? 'enemy' : 'friendly';
+// tokens an ability puts on the unit that has it (from the card texts in the token list): only offered for those units.
+// Burrowed: Roach, Corpser and Vile Roach burrow themselves; the Zerg Swarm faction card (Rapid Burrowing) and the
+// Hatchery tactical card (Lie in Wait) let any Ground Unit burrow, except a Roachling, which never can.
+const TOK_ON = {
+	guardian: ['Sentry'], stim: ['Marine', "Raynor's Raider", 'Marauder', 'Nova'], shield: ['Marine'], siege: ['Siege Tank'],
+	burrowed: ['Roach', 'Corpser'], brood1: ['Zagara'], brood2: ['Zagara'], brood3: ['Zagara'],
+	'txt:ROA:+1:P': ['Adept'], 'txt:SPD:+1:Z': ['Roach', 'Corpser'], 'txt:SPD:+2:Z': ['Roach', 'Corpser']
+};
+for (const c of TOK_CAT) if (TOK_ON[c.id]) c.on = TOK_ON[c.id];
+const TOK_ON_UNLESS = { burrowed: ['zerg swarm', 'hatchery'] }, TOK_NEVER = { burrowed: ['roachling'] };
+// does this unit carry the ability that puts the token on itself?
+function tokFitsUnit(c, u) {
+	if (!c.on) return true;
+	const names = [libCard(u.card)?.name, u.name].filter(Boolean).map(n => n.toLowerCase().replace(/[’`]/g, "'"));
+	if (TOK_NEVER[c.id]?.some(x => names.some(n => n.includes(x)))) return false;
+	if (TOK_ON_UNLESS[c.id] && armyNames([u.player]).some(n => TOK_ON_UNLESS[c.id].some(x => n.includes(x)))) return true;
+	// whole words: Roach must not match Roachling, which cannot burrow (names are letters, spaces and apostrophes)
+	return c.on.some(o => { const re = new RegExp('(^|[^a-z])' + o.toLowerCase() + '([^a-z]|$)'); return names.some(n => re.test(n)); });
+}
+function tokInfo(full) {
+	const [id, own] = String(full || '').split('@'), owner = own === '0' ? 0 : own === '1' ? 1 : null;
 	const c = TOK_CAT.find(x => x.id === id);
-	if (c && c.ic) return c;
+	if (c && c.ic) return { ...c, owner };
 	const m = /^txt:([A-Z]{2,4}):([+-]\d):([PTZG])$/.exec(id || '');
 	if (!m) return null;
-	return { id, f: m[3], rows: [m[1], m[2]], t: `${m[1]} ${m[2]}`, col: TOK_FACTIONS[m[3]][1], s: c?.s || `${m[2].startsWith('+') ? 'Buff' : 'Debuff'} ${m[1]} (${m[2].slice(1)})` };
+	return { id, f: m[3], rows: [m[1], m[2]], t: `${m[1]} ${m[2]}`, col: TOK_FACTIONS[m[3]][1], owner, tgt: m[2].startsWith('-') ? 'enemy' : 'friendly',
+		s: c?.s || `${m[2].startsWith('+') ? 'Buff' : 'Debuff'} ${m[1]} (${m[2].slice(1)})` };
 }
-const validTok = id => !!tokInfo(id);
+// both players on the same faction: tokens take the colour of the player who put them down (white ones stay white)
+function mirrorMatch() {
+	const a = armyFactions([0]), b = armyFactions([1]);
+	return [...a].some(f => b.has(f));
+}
+function tokColor(k) {
+	if (/^#fafafa$/i.test(k.col) || (k.owner !== 0 && k.owner !== 1) || !mirrorMatch()) return k.col;
+	return state.players[k.owner].color;
+}
+const validTok = id => !!tokInfo(id) && /^[^@]+(@[01])?$/.test(String(id));
 // the token as SVG markup, for the panels
 function tokSvg(id, px) {
 	const k = tokInfo(id); if (!k) return '';
-	if (k.rows) return `<svg viewBox="0 0 25 25" width="${px}" height="${px}" aria-hidden="true"><rect x="0.5" y="0.5" width="24" height="24" rx="1.5" fill="${k.col}" stroke="${TOK_INK}"/>`
+	const col = tokColor(k);
+	if (k.rows) return `<svg viewBox="0 0 25 25" width="${px}" height="${px}" aria-hidden="true"><rect x="0.5" y="0.5" width="24" height="24" rx="1.5" fill="${col}" stroke="${TOK_INK}"/>`
 		+ k.rows.map((t, i) => `<text x="12.5" y="${i ? 18.4 : 8.6}" text-anchor="middle" dominant-baseline="central" font-family="Chakra Petch, sans-serif" font-weight="700" font-size="8.4" fill="${TOK_INK}">${t.replace('-', '−')}</text>`).join('') + '</svg>';
 	return k.round
-		? `<svg viewBox="0 0 32 32" width="${px}" height="${px}" aria-hidden="true"><circle cx="16" cy="16" r="15.5" fill="${k.col}" stroke="${TOK_INK}"/><g transform="translate(16 16) scale(1.3) translate(-12.5 -12.5)">${TOK_ICONS[k.ic]}</g></svg>`
-		: `<svg viewBox="0 0 25 25" width="${px}" height="${px}" aria-hidden="true"><rect x="0.5" y="0.5" width="24" height="24" rx="1.5" fill="${k.col}" stroke="${TOK_INK}"/><g transform="translate(12.5 12.5) scale(1.15) translate(-12.5 -12.5)">${TOK_ICONS[k.ic]}</g></svg>`;
+		? `<svg viewBox="0 0 32 32" width="${px}" height="${px}" aria-hidden="true"><circle cx="16" cy="16" r="15.5" fill="${col}" stroke="${TOK_INK}"/><g transform="translate(16 16) scale(1.3) translate(-12.5 -12.5)">${TOK_ICONS[k.ic]}</g></svg>`
+		: `<svg viewBox="0 0 25 25" width="${px}" height="${px}" aria-hidden="true"><rect x="0.5" y="0.5" width="24" height="24" rx="1.5" fill="${col}" stroke="${TOK_INK}"/><g transform="translate(12.5 12.5) scale(1.15) translate(-12.5 -12.5)">${TOK_ICONS[k.ic]}</g></svg>`;
 }
 // the symbols as images, for drawing on the table
 const tokImgs = new Map();
@@ -3076,7 +3109,7 @@ function tokImg(ic) {
 }
 async function drawTok(x, id, px, py, S) {
 	const k = tokInfo(id); if (!k) return;
-	x.fillStyle = k.col; x.strokeStyle = TOK_INK; x.lineWidth = S / 25;
+	x.fillStyle = tokColor(k); x.strokeStyle = TOK_INK; x.lineWidth = S / 25;
 	if (k.round) { x.beginPath(); x.arc(px + S / 2, py + S / 2, S / 2 - x.lineWidth / 2, 0, 7); x.fill(); x.stroke(); }
 	else { x.beginPath(); x.roundRect(px + x.lineWidth / 2, py + x.lineWidth / 2, S - x.lineWidth, S - x.lineWidth, S * 0.06); x.fill(); x.stroke(); }
 	if (k.rows) {
@@ -3090,14 +3123,17 @@ async function drawTok(x, id, px, py, S) {
 }
 // on the table: a row of tokens just above the unit's first model on the table
 const tokStrips = new Map();   // unit id -> { mesh, cv, tex, sig, n }
+let tokMirror = null;
 function updateTokenStrips() {
+	const mm = mirrorMatch() + state.players.map(p => p.color).join();
+	if (mm !== tokMirror) { tokMirror = mm; for (const m of state.minis) if (m.tok && m.tok !== 'shade') refreshFace(objs.get(m.id)); }
 	const live = new Set();
 	for (const u of state.units) {
 		if (!u.tokens?.length) continue;
 		const m = state.minis.find(x => x.unit === u.id && !x.reserve && objs.get(x.id)), o = m && objs.get(m.id);
 		if (!o) continue;
 		live.add(u.id);
-		const n = Math.min(u.tokens.length, 8), sig = u.tokens.slice(0, 8).join('|');
+		const n = Math.min(u.tokens.length, 8), sig = u.tokens.slice(0, 8).map(id => id + tokColor(tokInfo(id) || { col: '' })).join('|');
 		let st = tokStrips.get(u.id);
 		if (!st || st.n !== n) {
 			if (st) { scene.remove(st.mesh); st.mesh.geometry.dispose(); st.mesh.material.dispose(); st.tex.dispose(); }
@@ -3126,6 +3162,7 @@ function setTokens(u, list, msg) {
 }
 function addToken(u, id) {
 	if (!u || !validTok(id)) return;
+	if (!id.includes('@')) id += '@' + (tokInfo(id).tgt === 'enemy' ? 1 - u.player : u.player);
 	if ((u.tokens || []).length >= 12) { toast('A unit holds at most 12 tokens'); return; }
 	setTokens(u, [...(u.tokens || []), id], `${esc(tokInfo(id).t)} on ${esc(u.name)}`);
 }
@@ -3152,9 +3189,19 @@ document.body.append(tokPick);
 function openTokPick(u, x, y) {
 	const fac = { Protoss: 'P', Terran: 'T', Zerg: 'Z' }[libCard(u.card)?.faction] || null;
 	const order = fac ? [fac, 'G', ...['P', 'T', 'Z'].filter(f => f !== fac)] : ['P', 'T', 'Z', 'G'];
-	const item = c => `<button data-tok="${esc(c.id)}" title="${esc(c.s)}">${tokSvg(c.id, 34)}<span>${esc(c.t)}</span></button>`;
+	const own = u.player, opp = 1 - u.player, by = c => c.tgt === 'enemy' ? opp : own;
+	const item = c => `<button data-tok="${esc(c.id)}" title="${esc(c.s)} (${c.tgt === 'enemy' ? 'goes on an enemy unit' : 'goes on a friendly unit'})">${tokSvg(c.id + '@' + by(c), 34)}<span>${esc(c.t)}</span></button>`;
+	const list = TOK_CAT.filter(c => !c.place);
+	const mine = list.filter(c => c.tgt !== 'enemy' && c.f !== 'G' && relevantTok(c, armyNames([own]), armyFactions([own])) && tokFitsUnit(c, u));
+	const theirs = list.filter(c => c.tgt === 'enemy' && relevantTok(c, armyNames([opp]), armyFactions([opp])));
+	const gen = list.filter(c => c.f === 'G');
+	const all = order.map(f => `<details><summary>${TOK_FACTIONS[f][0]}</summary><div class="tpgrid">${list.filter(c => c.f === f).map(item).join('')}</div></details>`).join('');
+	const P = state.players;
 	tokPick.innerHTML = `<div class="tph"><b>Token for ${esc(u.name)}</b><button class="btn" data-close aria-label="Close">✕</button></div>
-		${tokSections(TOK_CAT.filter(c => !c.place), item, order, armyNames([u.player]), armyFactions([u.player]), !fac || true)}
+		${mine.length || theirs.length || armyFactions([own]).size || armyFactions([opp]).size ? `
+		<div class="tprel"><div class="note" style="padding:4px 0">From ${esc(P[own].name)}’s army, on their own unit</div><div class="tpgrid">${mine.concat(gen).map(item).join('')}</div></div>
+		${theirs.length ? `<div class="tprel"><div class="note" style="padding:8px 0 4px">From ${esc(P[opp].name)}’s army, on an enemy unit</div><div class="tpgrid">${theirs.map(item).join('')}</div></div>` : ''}
+		<details class="tpall"><summary>Show all tokens</summary>${all}</details>` : all.replace(/<details>/, '<details open>')}
 		<div class="tpmake"><span class="note">Buff / Debuff</span>
 			<select id="tpStat" aria-label="Stat">${TOK_STATS.map(t => `<option>${t}</option>`).join('')}</select>
 			<select id="tpVal" aria-label="Value">${['+1', '+2', '+3', '+4', '-1', '-2', '-3', '-4'].map(v => `<option value="${v}">${v.replace('-', '−')}</option>`).join('')}</select>
@@ -3245,7 +3292,12 @@ tokPick.addEventListener('click', e => {
 	const u = findUnit(tokPick.dataset.unit); if (!u) { tokPick.hidden = true; return; }
 	const b = e.target.closest('button[data-tok]');
 	if (b) { addToken(u, b.dataset.tok); return; }
-	if (e.target.closest('#tpMake')) addToken(u, `txt:${$('#tpStat').value}:${$('#tpVal').value}:${tokPick.dataset.f}`);
+	if (e.target.closest('#tpMake')) {
+		// a debuff comes from the opponent's army, a buff from the unit's own: the token takes that army's faction colour
+		const v = $('#tpVal').value, by = v.startsWith('-') ? 1 - u.player : u.player;
+		const f = [...armyFactions([by])][0] || (by === u.player ? tokPick.dataset.f : 'G');
+		addToken(u, `txt:${$('#tpStat').value}:${v}:${f}@${by}`);
+	}
 });
 document.addEventListener('pointerdown', e => { if (!tokPick.hidden && !tokPick.contains(e.target) && !e.target.closest('#tokAdd, .ctxmenu')) tokPick.hidden = true; }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !tokPick.hidden) { tokPick.hidden = true; e.stopPropagation(); } }, true);
