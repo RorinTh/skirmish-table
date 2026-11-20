@@ -113,6 +113,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tpgrid button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 5px 3px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--fg); font: inherit; font-size: 10px; line-height: 1.15; text-align: center; cursor: pointer; }
 .tpgrid button:hover, .tpgrid button:focus-visible { border-color: var(--accent, #f3c33c); }
 .tpmake select { width: auto; flex: 0 0 auto; }
+.tokpick .tpall > summary { color: var(--fg); font-weight: 600; margin-top: 6px; }
+.tokpick .tpall > details { margin-left: 8px; }
+.tpside { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 2px 0 4px; }
+.tpside .btn[aria-pressed="true"] { border-color: var(--accent, #f3c33c); }
+.tpside .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; }
 .tpmake { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .ctxmenu .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; }
 .ctxmenu button[disabled] { opacity: .45; cursor: default; }
@@ -634,7 +639,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 		<div class="reserve r1" id="res1" aria-label="Player 2 reserves"></div>
 		<div class="reserve r0" id="res0" aria-label="Player 1 reserves"></div>
 		<div class="scale" aria-hidden="true"><div class="scale-bar" id="scaleBar"></div><span id="scaleLabel"></span></div>
-		<div class="hint">Drag a base: its unit follows in coherency (<b>Alt</b>+drag moves it alone); drag again to add a leg · <b>Enter</b> confirm · <b>Shift+Enter</b> confirm all · <b>Esc</b> cancel · <b>Backspace</b> drop last leg<br>Double-click to ping a spot · right-click a model to send its unit to reserves · <b>Shift</b>+click or <b>Shift</b>+drag to select several · <b>R</b> ruler · Drag the table to pan · scroll to zoom · <b>F</b> fit table</div>
+		<div class="hint">Drag a base: its unit follows in coherency (<b>Alt</b>+drag moves it alone); drag again to add a leg · <b>Enter</b> confirm · <b>Shift+Enter</b> confirm all · <b>Esc</b> cancel · <b>Backspace</b> drop last leg<br>Right-click an empty spot to place a faction token · Double-click to ping a spot · right-click a model to send its unit to reserves · <b>Shift</b>+click or <b>Shift</b>+drag to select several · <b>R</b> ruler · Drag the table to pan · scroll to zoom · <b>F</b> fit table</div>
 		<div class="toast" id="toast" hidden></div>
 		<div class="tip" id="tip" hidden></div>
 	</main>
@@ -875,7 +880,9 @@ function normMini(m) {
 		// in the player's Reserves: not on the table, not drawn, not counted for supply (core rules: units wait in Reserves)
 		reserve: !!m.reserve,
 		// damage taken: points off Health and off Shield (what is left = max - damage)
-		dmgH: clampN(m.dmgH, 0, 99, 0) | 0, dmgS: clampN(m.dmgS, 0, 99, 0) | 0 };
+		dmgH: clampN(m.dmgH, 0, 99, 0) | 0, dmgS: clampN(m.dmgS, 0, 99, 0) | 0,
+		// a faction token placed on the table (a Faction Indicator, a Force Field): no unit rules, moved freely
+		tok: typeof m.tok === 'string' && validTok(m.tok) ? m.tok : null };
 }
 function unitIdFor(m) {
 	const u = typeof m.unit === 'string' && ID_RE.test(m.unit) ? m.unit : null;
@@ -1049,7 +1056,17 @@ el.addEventListener('contextmenu', e => {
 	const hit = pick(e);
 	if (hit?.kind !== 'mini') {
 		const tp = tablePoint(e), mk = tp && [...markerViz].find(([, v]) => Math.hypot(tp.x - v.px, tp.z - v.pz) <= MARKER_R + 0.4);
-		if (!mk) { closeCtx(); return; }
+		if (!mk) {
+			if (!tp || Math.abs(tp.x) > state.table.w / 2 || Math.abs(tp.z) > state.table.d / 2) { closeCtx(); return; }
+			ctxMenu.innerHTML = `<button role="menuitem" data-act="place">Place faction token here…</button>`;
+			ctxMenu.dataset.px = tp.x; ctxMenu.dataset.pz = tp.z; ctxMenu.dataset.id = '';
+			ctxMenu.hidden = false;
+			const r = ctxMenu.getBoundingClientRect();
+			ctxMenu.style.left = Math.min(e.clientX, innerWidth - r.width - 8) + 'px';
+			ctxMenu.style.top = Math.min(e.clientY, innerHeight - r.height - 8) + 'px';
+			ctxMenu.querySelector('button')?.focus();
+			return;
+		}
 		const [n] = mk, k = objectiveCounts().get(n), c = state.ctl[n]?.c ?? null, P = state.players;
 		ctxMenu.innerHTML = `<div class="ctxh">Mission Marker ${n} · ${c === null ? 'no one controls it' : esc(P[c].name) + ' controls it'}</div>
 			<div class="ctxh">Supply on it: ${esc(P[0].name)} ${k.sup[0]}, ${esc(P[1].name)} ${k.sup[1]}</div>
@@ -1064,10 +1081,20 @@ el.addEventListener('contextmenu', e => {
 		return;
 	}
 	const m = findMini(hit.id); if (!m || m.reserve) return;
+	if (m.tok) {
+		ctxMenu.innerHTML = `<div class="ctxh">${esc(tokInfo(m.tok)?.t || m.name)}</div><button role="menuitem" data-act="deltok">Remove token</button>`;
+		ctxMenu.dataset.id = m.id; ctxMenu.hidden = false;
+		const r = ctxMenu.getBoundingClientRect();
+		ctxMenu.style.left = Math.min(e.clientX, innerWidth - r.width - 8) + 'px';
+		ctxMenu.style.top = Math.min(e.clientY, innerHeight - r.height - 8) + 'px';
+		ctxMenu.querySelector('button')?.focus();
+		return;
+	}
 	const n = unitModels(m).filter(x => !x.reserve).length, name = findUnit(m.unit)?.name || m.name;
 	ctxMenu.innerHTML = `<div class="ctxh">${esc(name)}</div>
 		<button role="menuitem" data-act="reserve">Send ${n > 1 ? `unit (${n} models)` : 'to'} to reserves</button>
 		<button role="menuitem" data-act="token">Add token…</button>
+		${/adept/i.test(libCard(findUnit(m.unit)?.card)?.name || findUnit(m.unit)?.name || m.name) ? '<button role="menuitem" data-act="shade">Place Shade</button>' : ''}
 		${n > 1 ? '<button role="menuitem" data-act="unit">Select unit</button>' : ''}`.replace('Send to to', 'Send to');
 	ctxMenu.dataset.id = m.id;
 	ctxMenu.hidden = false;
@@ -1079,6 +1106,8 @@ el.addEventListener('contextmenu', e => {
 ctxMenu.addEventListener('click', e => {
 	const b = e.target.closest('button'); if (!b) return;
 	const menuAt = ctxMenu.getBoundingClientRect();   // where the menu was, for the token picker
+	if (b.dataset.act === 'place') { closeCtx(); openTokPlace(+ctxMenu.dataset.px, +ctxMenu.dataset.pz, menuAt.left, menuAt.top); return; }
+	if (b.dataset.act === 'deltok') { const t = findMini(ctxMenu.dataset.id); closeCtx(); if (t) { select('mini', t.id); removeSel(); } return; }
 	if (b.dataset.act === 'ctl') {
 		const n = ctxMenu.dataset.marker, c = b.dataset.c === '' ? null : +b.dataset.c; closeCtx();
 		state.ctl[n] = { c, l: state.ctl[n]?.l ?? null }; objSig = ''; save();
@@ -1088,6 +1117,7 @@ ctxMenu.addEventListener('click', e => {
 	const m = findMini(ctxMenu.dataset.id); closeCtx();
 	if (!m || m.reserve) return;
 	if (b.dataset.act === 'reserve') toReserves(m);
+	else if (b.dataset.act === 'shade') placeShade(m);
 	else if (b.dataset.act === 'token') openTokPick(ensureUnit(m), menuAt.left, menuAt.top);
 	else if (b.dataset.act === 'unit') selectUnitOf(m);
 });
@@ -1635,6 +1665,16 @@ function drawFace(cv, m, img, sym) {
 }
 async function refreshFace(o) {
 	const m = o && findMini(o.id); if (!m) return;
+	if (m.tok && m.tok !== 'shade') {   // a faction token shows its own design over the whole base
+		const sig = 'tok|' + m.tok + '|' + state.players[m.player].color;
+		if (o.faceSig === sig) return;
+		o.faceSig = sig;
+		o.sideMat.color.set(state.players[m.player].color).multiplyScalar(0.5);
+		const x = o.cv.getContext('2d'); x.clearRect(0, 0, o.cv.width, o.cv.height);
+		await drawTok(x, m.tok, 0, 0, o.cv.width);
+		if (o.faceSig === sig) o.tex.needsUpdate = true;
+		return;
+	}
 	const sym = faceMode === 'symbol' ? symbolFor(m) : null;
 	// only redraw when what the face shows has changed
 	const sig = [state.players[m.player].color, sym ? sym.glyph + sym.label : m.img || initials(m.name), dmgSig(m), contestOf.get(m.id) || ''].join('|');
@@ -1736,7 +1776,7 @@ function unitType(u) {
 function assignGlows() {
 	let changed = false;
 	const used = new Map();   // player|type -> { count, colours }
-	const live = state.units.filter(u => state.minis.some(m => m.unit === u.id));
+	const live = state.units.filter(u => state.minis.some(m => m.unit === u.id) && !state.minis.some(m => m.unit === u.id && m.tok));
 	for (const u of live) {
 		const k = u.player + '|' + unitType(u);
 		if (!used.has(k)) used.set(k, { count: 0, colours: new Set() });
@@ -1779,6 +1819,10 @@ function addMiniObj(m) {
 	g.add(glow, cyl, top, sel, uring, bad); g.position.set(m.x, 0, m.z);
 	scene.add(g);
 	const o = { kind: 'mini', id: m.id, g, cv, tex, sideMat, sel, uring, bad, glow };
+	if (m.tok === 'shade') {   // a Shade: the Adept's base, see-through
+		for (const mat of [top.material, sideMat]) { mat.transparent = true; mat.opacity = 0.42; mat.depthWrite = false; }
+		cyl.castShadow = false;
+	}
 	cyl.userData.ref = top.userData.ref = o;
 	objs.set(m.id, o); pickables.push(cyl, top);
 	refreshFace(o); refreshGlow(o);
@@ -1914,7 +1958,43 @@ function updateDistances() {
 			L.pos.set(m.x, BASE_H, m.z);
 		}
 	}
+	if (s?.tok) {
+		const rs = radius(s), put = (key, txt, x, z, fs) => {
+			seen.add(key);
+			let L = distLabels.get(key);
+			if (!L) { L = makeLabel('dist'); distLabels.set(key, L); }
+			if (L.text !== txt) { L.text = txt; L.el.textContent = txt; }
+			if (L.fs !== fs) { L.fs = fs; L.el.style.fontSize = fs + 'px'; }
+			L.center = true; L.on = true; L.pos.set(x, BASE_H, z);
+		};
+		const fsM = Math.round(Math.min(18, Math.max(9, 2 * MARKER_R * pxPerIn * 0.3)));
+		for (const [n, v] of markerViz) put('mk' + n, fmt(Math.max(0, Math.hypot(v.px - s.x, v.pz - s.z) - rs - MARKER_R)), v.px, v.pz, fsM);
+		for (const t of state.terrain) {
+			const q = terrainNearest(t, s.x, s.z);
+			put('tr' + t.id, fmt(Math.max(0, q.d - rs)), q.x, q.z, 12);
+		}
+	}
 	for (const [id, L] of distLabels) if (!seen.has(id)) { dropLabel(L); distLabels.delete(id); }
+}
+// the point of a terrain piece's footprint nearest to (px, pz), and how far it is (0 inside)
+function terrainNearest(t, px, pz) {
+	const c = Math.cos(t.rot), sn = Math.sin(t.rot), dx = px - t.x, dz = pz - t.z;
+	const lx = dx * c - dz * sn, lz = dx * sn + dz * c;   // into the piece's own axes
+	let best = null;
+	const box = (w, d, cx, cz) => {
+		const nx = Math.min(cx + w / 2, Math.max(cx - w / 2, lx)), nz = Math.min(cz + d / 2, Math.max(cz - d / 2, lz));
+		const dd = Math.hypot(lx - nx, lz - nz);
+		if (!best || dd < best.d) best = { d: dd, nx, nz };
+	};
+	if (t.shape === 'circle') {
+		const a = Math.atan2(lz, lx), rr = 1 / Math.hypot(Math.cos(a) / (t.w / 2), Math.sin(a) / (t.d / 2)), r0 = Math.hypot(lx, lz);
+		best = r0 <= rr ? { d: 0, nx: lx, nz: lz } : { d: r0 - rr, nx: Math.cos(a) * rr, nz: Math.sin(a) * rr };
+	} else if (t.shape === 'L') {
+		const k = Math.min(1.5, Math.min(t.w, t.d) / 3);
+		box(t.w, k, 0, -t.d / 2 + k / 2); box(k, t.d - k, -t.w / 2 + k / 2, k / 2);
+	} else box(t.w, t.d, 0, 0);
+	// back to the table's axes
+	return { d: best.d, x: t.x + best.nx * c + best.nz * sn, z: t.z - best.nx * sn + best.nz * c };
 }
 
 // range rings around the selected base, measured from its edge
@@ -1999,7 +2079,7 @@ function onDown(e) {
 	controls.enabled = false; el.setPointerCapture(e.pointerId);
 	drag = { ref: hit, item, off: { x: item.x - p.x, z: item.z - p.z }, start: { x: item.x, z: item.z }, moved: false, resume };
 	el.style.cursor = 'grabbing';
-	if (hit.kind !== 'mini') return;
+	if (hit.kind !== 'mini' || item.tok) return;
 	const follows = moves.get(item.id)?.follow;
 	if (follows) { drag.follower = follows; return; }           // a follower in an open unit move: placed by hand
 	const fresh = !moves.has(item.id);
@@ -2031,6 +2111,7 @@ function onMove(e) {
 		it.x = x; it.z = z; drag.moved = true;
 		objs.get(it.id).g.position.set(x, 0, z);
 		if (drag.follower) { updateCoherency(drag.follower); sendMoves(); }
+		else if (drag.ref.kind === 'mini' && it.tok) syncRanges();
 		else if (drag.ref.kind === 'mini') { drawMove(moves.get(it.id)); if (groups.has(it.id)) layoutFollowers(it.id); syncRanges(); sendMoves(); }
 		if (measure) updateMeasure();
 		return;
@@ -2079,7 +2160,7 @@ function onUp(e) {
 		return;
 	}
 	if (drag) {
-		if (drag.ref.kind === 'mini') {
+		if (drag.ref.kind === 'mini' && !drag.item.tok) {
 			// a model's move waits for Enter / the green tick, or Esc / the red cross
 			const it = drag.item, mv = moves.get(it.id);
 			if (drag.follower) {
@@ -2598,6 +2679,24 @@ function renderCard() {
 	}
 	if (sel.kind === 'mini') {
 		const m = findMini(sel.id), several = unitModels(m).length > 1;
+		if (m.tok) {
+			const k = tokInfo(m.tok);
+			cardEl.innerHTML = `
+			<div class="who"><span style="line-height:0">${tokSvg(m.tok, 40)}</span><div>
+				<div style="font-weight:600;padding-left:6px">${esc(k?.t || m.name)}</div>
+				<div class="meta">${m.baseMm} mm token · ${esc(state.players[m.player].name)}</div>
+			</div></div>
+			<p class="note" style="margin:6px 2px">${esc(k?.s || '')}. Distances to models, Mission Markers and terrain show while it is selected.</p>
+			<div class="acts">
+				<button class="btn" id="cardRanges" aria-pressed="${state.showRanges}">Ranges</button>
+				<button class="btn" id="cardSide" title="Give it to the other player">To ${esc(state.players[1 - m.player].name)}</button>
+				<button class="btn danger" id="cardDel">Remove</button>
+			</div>`;
+			$('#cardRanges').onclick = () => { state.showRanges = !state.showRanges; drawRanges(); renderCard(); save(); };
+			$('#cardSide').onclick = () => { m.player = 1 - m.player; const u = findUnit(m.unit); if (u) u.player = m.player; refreshFace(objs.get(m.id)); renderCard(); save(); };
+			$('#cardDel').onclick = removeSel;
+			return;
+		}
 		cardEl.innerHTML = `
 			<div class="who">${thumbHtml(m)}<div>
 				<input class="name" id="cardName" value="${esc(m.name)}" aria-label="Model name" maxlength="40">
@@ -2850,6 +2949,13 @@ el.addEventListener('dblclick', e => {
 // black ring and a black symbol, round 32 mm Faction Indicators, and Buff/Debuff text tiles (stat over sign and value).
 const TOK_ICONS = {"hidden":"<circle cx=\"12.5\" cy=\"12.5\" r=\"6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"6\" y1=\"19\" x2=\"19\" y2=\"6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","guardian":"<path d=\"M6 16 A6.5 6.5 0 0 1 19 16\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><ellipse cx=\"12.5\" cy=\"16.6\" rx=\"6.2\" ry=\"1.2\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","sword":"<line x1=\"6.5\" y1=\"6.5\" x2=\"18.5\" y2=\"18.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"5.5\" y1=\"10.5\" x2=\"10.5\" y2=\"5.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M9.5 19.5 A8 8 0 0 0 19.5 9.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","voidprison":"<circle cx=\"12.5\" cy=\"12.5\" r=\"7.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"12.5\" cy=\"12.5\" r=\"3.4\" fill=\"#2b2e31\"/><path d=\"M12.5 4.9 Q16 9 12.5 9.1\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M20.1 12.5 Q16 16 15.9 12.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.5 20.1 Q9 16 12.5 15.9\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M4.9 12.5 Q9 9 9.1 12.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","feedback":"<polyline points=\"6.5,6.5 12.5,12 9.8,13.4 16,18.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M18.6 16.6 Q21 9.5 14.6 6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polyline points=\"15.2,8.3 14.4,5.9 16.8,5.3\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","farsight":"<path d=\"M4.3 12.5 Q12.5 3.8 20.7 12.5 Q12.5 21.2 4.3 12.5 Z\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polygon points=\"12.5,9 15,12.5 12.5,16 10,12.5\" fill=\"#2b2e31\"/>","khala":"<polygon points=\"12.5,4.3 16.8,10.8 12.5,20.7 8.2,10.8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"8.2\" y1=\"10.8\" x2=\"16.8\" y2=\"10.8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"4.6\" y1=\"8\" x2=\"6.4\" y2=\"9.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"20.4\" y1=\"8\" x2=\"18.6\" y2=\"9.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"4.4\" y1=\"13.6\" x2=\"6.3\" y2=\"13.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"20.6\" y1=\"13.6\" x2=\"18.7\" y2=\"13.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","nerazim":"<path d=\"M4.93 11.86 L5.37 9.06 L5.86 6.73 L6.40 4.40 L6.68 3.44 L8.25 4.14 L9.81 4.61 L11.55 4.94 L13.33 5.11 L12.93 7.02 L12.79 7.97 L12.62 9.78 L12.59 10.62 L12.67 12.14 L12.92 13.43 L13.10 13.98 L13.47 14.70 L13.94 15.30 L14.29 15.61 L14.99 16.00 L15.57 15.87 L15.99 15.72 L16.38 15.47 L16.75 15.14 L17.16 14.61 L17.34 14.29 L17.79 13.13 L18.13 11.61 L18.32 10.15 L18.35 8.41 L18.31 5.54 L18.14 3.59 L18.81 4.98 L19.18 6.01 L19.49 7.11 L19.84 8.89 L20.01 10.22 L20.12 11.59 L20.15 13.71 L20.08 15.21 L19.94 16.85 L19.78 18.15 L19.50 20.00 L19.23 21.28 L19.10 21.56 L17.74 20.98 L16.75 20.61 L15.71 20.28 L14.54 19.98 L13.40 19.76 L11.63 19.51 L10.50 19.41 L8.93 19.36 L9.62 16.92 L9.90 15.69 L10.07 14.60 L10.16 13.61 L10.17 12.72 L10.08 11.99 L9.91 11.40 L9.64 10.95 L9.47 10.77 L9.05 10.49 L8.80 10.41 L8.53 10.37 L7.96 10.47 L7.31 10.79 L6.57 11.34 L4.85 13.00 L4.93 11.86 Z\" fill=\"#2b2e31\"/>","observer":"<circle cx=\"12.5\" cy=\"12.5\" r=\"6.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"12.5\" cy=\"12.5\" r=\"2.6\" fill=\"#2b2e31\"/><line x1=\"5.6\" y1=\"5.6\" x2=\"7.6\" y2=\"7.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"19.4\" y1=\"5.6\" x2=\"17.4\" y2=\"7.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"5.6\" y1=\"19.4\" x2=\"7.6\" y2=\"17.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"19.4\" y1=\"19.4\" x2=\"17.4\" y2=\"17.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","conduit":"<polygon points=\"12.5,4 16.2,12.5 12.5,21 8.8,12.5\" fill=\"#2b2e31\"/><ellipse cx=\"12.5\" cy=\"13.5\" rx=\"8.4\" ry=\"2.4\" fill=\"none\" stroke=\"#ffdd1a\" stroke-width=\"2.2\"/><ellipse cx=\"12.5\" cy=\"13.5\" rx=\"8.4\" ry=\"2.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","executor":"<polyline points=\"5,16 8.8,7.8 12.5,13 16.2,7.8 20,16\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"6.5\" y1=\"19.2\" x2=\"18.5\" y2=\"19.2\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","stim":"<g transform=\"rotate(-45 12.5 12.5)\"><rect x=\"8\" y=\"10.4\" width=\"9.6\" height=\"4.2\" rx=\"0.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"9.3\" y=\"11.65\" width=\"4.2\" height=\"1.7\" fill=\"#2b2e31\"/><line x1=\"17.6\" y1=\"12.5\" x2=\"20.4\" y2=\"12.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"20.6\" y1=\"10.4\" x2=\"20.6\" y2=\"14.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"8\" y1=\"12.5\" x2=\"3.8\" y2=\"12.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></g>","shield":"<path d=\"M12.5 4.5 L19.5 7 V12 Q19.5 18 12.5 21 Q5.5 18 5.5 12 V7 Z\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polyline points=\"9,11 12.5,14.2 16,11\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","retreat":"<line x1=\"18\" y1=\"5\" x2=\"18\" y2=\"20\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-dasharray=\"1.6 1.4\"/><polyline points=\"10,8 5.5,12.5 10,17\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polyline points=\"14.4,8 9.9,12.5 14.4,17\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","orders":"<polyline points=\"6.5,9.2 12.5,5.799999999999999 18.5,9.2\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polyline points=\"6.5,12.6 12.5,9.2 18.5,12.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polygon points=\"12.5,13.6 13.6,16.4 16.6,17.5 13.6,18.6 12.5,21.4 11.4,18.6 8.4,17.5 11.4,16.4\" fill=\"#2b2e31\"/>","markdeath":"<circle cx=\"12.5\" cy=\"12.5\" r=\"7.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"12.5\" y1=\"4.3\" x2=\"12.5\" y2=\"6.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"12.5\" y1=\"18.4\" x2=\"12.5\" y2=\"20.7\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"4.3\" y1=\"12.5\" x2=\"6.6\" y2=\"12.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"18.4\" y1=\"12.5\" x2=\"20.7\" y2=\"12.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"12.5\" cy=\"11.6\" r=\"3.3\" fill=\"#2b2e31\"/><rect x=\"10.7\" y=\"13.4\" width=\"3.6\" height=\"2.8\" rx=\"0.5\" fill=\"#2b2e31\"/><circle cx=\"11.2\" cy=\"11.5\" r=\"0.85\" fill=\"#6f9fd8\"/><circle cx=\"13.8\" cy=\"11.5\" r=\"0.85\" fill=\"#6f9fd8\"/>","lock":"<path d=\"M5 8.5 V5 H8.5 M16.5 5 H20 V8.5 M20 16.5 V20 H16.5 M8.5 20 H5 V16.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"12.5\" cy=\"12.5\" r=\"3.8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"12.5\" cy=\"12.5\" r=\"1.5\" fill=\"#2b2e31\"/>","flare":"<circle cx=\"12.5\" cy=\"12.5\" r=\"2.4\" fill=\"#2b2e31\"/><line x1=\"16.40\" y1=\"12.50\" x2=\"21.10\" y2=\"12.50\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"15.88\" y1=\"14.45\" x2=\"18.56\" y2=\"16.00\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"14.45\" y1=\"15.88\" x2=\"16.80\" y2=\"19.95\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"12.50\" y1=\"16.40\" x2=\"12.50\" y2=\"19.50\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"10.55\" y1=\"15.88\" x2=\"8.20\" y2=\"19.95\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"9.12\" y1=\"14.45\" x2=\"6.44\" y2=\"16.00\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"8.60\" y1=\"12.50\" x2=\"3.90\" y2=\"12.50\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"9.12\" y1=\"10.55\" x2=\"6.44\" y2=\"9.00\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"10.55\" y1=\"9.12\" x2=\"8.20\" y2=\"5.05\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"12.50\" y1=\"8.60\" x2=\"12.50\" y2=\"5.50\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"14.45\" y1=\"9.12\" x2=\"16.80\" y2=\"5.05\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"15.88\" y1=\"10.55\" x2=\"18.56\" y2=\"9.00\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","seeker":"<path d=\"M5 19.5 Q5.4 9.4 10.6 9.1\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-dasharray=\"1.4 1.2\"/><rect x=\"11.6\" y=\"8.1\" width=\"6.2\" height=\"2\" fill=\"#2b2e31\"/><polygon points=\"17.8,8.1 20.6,9.1 17.8,10.1\" fill=\"#2b2e31\"/><polygon points=\"11.6,8.1 10.2,6.3 13.3,8.1\" fill=\"#2b2e31\"/><polygon points=\"11.6,10.1 10.2,11.9 13.3,10.1\" fill=\"#2b2e31\"/><circle cx=\"17\" cy=\"17\" r=\"2.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"17\" cy=\"17\" r=\"0.8\" fill=\"#2b2e31\"/>","spotter":"<line x1=\"12.5\" y1=\"11.6\" x2=\"12.5\" y2=\"20.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polyline points=\"8.8,20.6 12.5,13.6 16.2,20.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"12.5\" cy=\"10.4\" r=\"1.2\" fill=\"#2b2e31\"/><path d=\"M9.9 8.9 A3 3 0 0 1 15.1 8.9\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M7.74 7.65 A5.5 5.5 0 0 1 17.26 7.65\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","depot":"<polygon points=\"12.5,5 19.5,9 19.5,16 12.5,20 5.5,16 5.5,9\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polyline points=\"5.5,9 12.5,13 19.5,9\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"12.5\" y1=\"13\" x2=\"12.5\" y2=\"20\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polyline points=\"8.2,13.4 8.2,15.8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polyline points=\"16.8,13.4 16.8,15.8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","scan":"<circle cx=\"12.5\" cy=\"12.5\" r=\"8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"12.5\" cy=\"12.5\" r=\"4.2\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.5 12.5 L12.5 4.5 A8 8 0 0 1 19.43 8.5 Z\" fill=\"#2b2e31\"/><circle cx=\"16\" cy=\"16.4\" r=\"0.95\" fill=\"#2b2e31\"/>","dustoff":"<circle cx=\"12.5\" cy=\"12.5\" r=\"8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"9.4\" y1=\"8.4\" x2=\"9.4\" y2=\"16.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"15.6\" y1=\"8.4\" x2=\"15.6\" y2=\"16.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"9.4\" y1=\"12.5\" x2=\"15.6\" y2=\"12.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","comsat":"<rect x=\"10.6\" y=\"10.6\" width=\"3.8\" height=\"3.8\" fill=\"#2b2e31\"/><rect x=\"4.5\" y=\"11.3\" width=\"4.7\" height=\"2.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"15.8\" y=\"11.3\" width=\"4.7\" height=\"2.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"9.2\" y1=\"12.5\" x2=\"10.6\" y2=\"12.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"14.4\" y1=\"12.5\" x2=\"15.8\" y2=\"12.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M10 17.6 A3 3 0 0 0 15 17.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"12.5\" y1=\"14.4\" x2=\"12.5\" y2=\"18.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","burrowed":"<path d=\"M5.5 12.5 Q12.5 3.5 19.5 12.5 Z\" fill=\"#2b2e31\"/><line x1=\"4\" y1=\"14.2\" x2=\"21\" y2=\"14.2\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"12.5\" y1=\"16\" x2=\"12.5\" y2=\"20.2\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polyline points=\"10.3,18.3 12.5,20.6 14.7,18.3\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","mutation":"<path d=\"M12.50 4.60L13.32 5.10L14.11 5.60L14.83 6.10L15.47 6.60L15.99 7.10L16.38 7.60L16.62 8.10L16.70 8.60L16.62 9.10L16.38 9.60L15.99 10.10L15.47 10.60L14.83 11.10L14.11 11.60L13.32 12.10L12.50 12.60L11.68 13.10L10.89 13.60L10.17 14.10L9.53 14.60L9.01 15.10L8.62 15.60L8.38 16.10L8.30 16.60L8.38 17.10L8.62 17.60L9.01 18.10L9.53 18.60L10.17 19.10L10.89 19.60L11.68 20.10L12.50 20.60\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.50 4.60L11.68 5.10L10.89 5.60L10.17 6.10L9.53 6.60L9.01 7.10L8.62 7.60L8.38 8.10L8.30 8.60L8.38 9.10L8.62 9.60L9.01 10.10L9.53 10.60L10.17 11.10L10.89 11.60L11.68 12.10L12.50 12.60L13.32 13.10L14.11 13.60L14.83 14.10L15.47 14.60L15.99 15.10L16.38 15.60L16.62 16.10L16.70 16.60L16.62 17.10L16.38 17.60L15.99 18.10L15.47 18.60L14.83 19.10L14.11 19.60L13.32 20.10L12.50 20.60\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"14.107270415933376\" y1=\"5.6\" x2=\"10.892729584066624\" y2=\"5.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"16.380294036547404\" y1=\"7.6\" x2=\"8.619705963452596\" y2=\"7.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"16.380294036547404\" y1=\"9.6\" x2=\"8.619705963452596\" y2=\"9.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"14.107270415933378\" y1=\"11.6\" x2=\"10.892729584066622\" y2=\"11.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"10.892729584066624\" y1=\"13.6\" x2=\"14.107270415933376\" y2=\"13.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"8.619705963452596\" y1=\"15.6\" x2=\"16.380294036547404\" y2=\"15.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"8.619705963452596\" y1=\"17.6\" x2=\"16.380294036547404\" y2=\"17.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"10.89272958406662\" y1=\"19.6\" x2=\"14.10727041593338\" y2=\"19.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","carapace":"<path d=\"M7.300000000000001 8 A2.6 2.6 0 0 0 12.5 8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.5 8 A2.6 2.6 0 0 0 17.7 8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M4.699999999999999 12.4 A2.6 2.6 0 0 0 9.9 12.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M9.9 12.4 A2.6 2.6 0 0 0 15.1 12.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M15.1 12.4 A2.6 2.6 0 0 0 20.3 12.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M7.300000000000001 16.8 A2.6 2.6 0 0 0 12.5 16.8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.5 16.8 A2.6 2.6 0 0 0 17.7 16.8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.5 4 Q20.5 6 20.5 12.5 Q20.5 19 12.5 21 Q4.5 19 4.5 12.5 Q4.5 6 12.5 4 Z\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","brood1":"<polygon points=\"6,15 6,7.5 9.5,11 12.5,6 15.5,11 19,7.5 19,15\" fill=\"#2b2e31\"/><circle cx=\"12.5\" cy=\"18.6\" r=\"1.15\" fill=\"#2b2e31\"/>","brood2":"<polygon points=\"6,15 6,7.5 9.5,11 12.5,6 15.5,11 19,7.5 19,15\" fill=\"#2b2e31\"/><circle cx=\"10.8\" cy=\"18.6\" r=\"1.15\" fill=\"#2b2e31\"/><circle cx=\"14.2\" cy=\"18.6\" r=\"1.15\" fill=\"#2b2e31\"/>","brood3":"<polygon points=\"6,15 6,7.5 9.5,11 12.5,6 15.5,11 19,7.5 19,15\" fill=\"#2b2e31\"/><circle cx=\"9.1\" cy=\"18.6\" r=\"1.15\" fill=\"#2b2e31\"/><circle cx=\"12.5\" cy=\"18.6\" r=\"1.15\" fill=\"#2b2e31\"/><circle cx=\"15.9\" cy=\"18.6\" r=\"1.15\" fill=\"#2b2e31\"/>","flag":"<line x1=\"8\" y1=\"5\" x2=\"8\" y2=\"20.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polygon points=\"8.6,5.6 19.6,5.6 17,8.6 19.6,11.6 8.6,11.6\" fill=\"#2b2e31\"/><polyline points=\"5,20.5 6.5,17.6 8,20.5 9.5,17.6 11,20.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","poison":"<path transform=\"translate(12.5 12.2) scale(1.35)\" d=\"M0 -6 C0 -6 4.6 -0.6 4.6 2.3 A4.6 4.6 0 0 1 -4.6 2.3 C-4.6 -0.6 0 -6 0 -6 Z\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"12.5\" cy=\"15.2\" r=\"2\" fill=\"#2b2e31\"/><circle cx=\"10.4\" cy=\"10.9\" r=\"1\" fill=\"#2b2e31\"/><circle cx=\"14.4\" cy=\"11.6\" r=\"0.8\" fill=\"#2b2e31\"/>","ventral":"<ellipse cx=\"12.5\" cy=\"10.2\" rx=\"6.6\" ry=\"3.6\" fill=\"#2b2e31\"/><polygon points=\"5.2,9.2 3.6,6.6 7.2,7.6\" fill=\"#2b2e31\"/><polygon points=\"19.8,9.2 21.4,6.6 17.8,7.6\" fill=\"#2b2e31\"/><line x1=\"12.5\" y1=\"15\" x2=\"12.5\" y2=\"19.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polyline points=\"10.5,17.8 12.5,20 14.5,17.8\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","overseer":"<path d=\"M4.6 13.5 Q12.5 5.8 20.4 13.5 Q12.5 21.2 4.6 13.5 Z\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.5 10.9 Q14.6 13.5 12.5 16.1 Q10.4 13.5 12.5 10.9 Z\" fill=\"#2b2e31\"/><path d=\"M10 11.9 Q9 13.5 10 15.1\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M15 11.9 Q16 13.5 15 15.1\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"0.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"6.8\" y1=\"8.6\" x2=\"5.6\" y2=\"5.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"10.2\" y1=\"6.9\" x2=\"9.4\" y2=\"4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"14.8\" y1=\"6.9\" x2=\"15.6\" y2=\"4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"18.2\" y1=\"8.6\" x2=\"19.4\" y2=\"5.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>","corrosive":"<path transform=\"translate(7.9 9.2) scale(0.7)\" d=\"M0 -6 C0 -6 4.6 -0.6 4.6 2.3 A4.6 4.6 0 0 1 -4.6 2.3 C-4.6 -0.6 0 -6 0 -6 Z\" fill=\"#2b2e31\"/><path transform=\"translate(17.1 9.2) scale(0.7)\" d=\"M0 -6 C0 -6 4.6 -0.6 4.6 2.3 A4.6 4.6 0 0 1 -4.6 2.3 C-4.6 -0.6 0 -6 0 -6 Z\" fill=\"#2b2e31\"/><path transform=\"translate(12.5 15.8) scale(0.7)\" d=\"M0 -6 C0 -6 4.6 -0.6 4.6 2.3 A4.6 4.6 0 0 1 -4.6 2.3 C-4.6 -0.6 0 -6 0 -6 Z\" fill=\"#2b2e31\"/>","bilebomb":"<path transform=\"translate(12.5 12.2) scale(1.3)\" d=\"M0 -6 C0 -6 4.6 -0.6 4.6 2.3 A4.6 4.6 0 0 1 -4.6 2.3 C-4.6 -0.6 0 -6 0 -6 Z\" fill=\"#2b2e31\"/><circle cx=\"5\" cy=\"19\" r=\"1\" fill=\"#2b2e31\"/><circle cx=\"20\" cy=\"19\" r=\"1\" fill=\"#2b2e31\"/><circle cx=\"4.6\" cy=\"15\" r=\"0.8\" fill=\"#2b2e31\"/><circle cx=\"20.4\" cy=\"15\" r=\"0.8\" fill=\"#2b2e31\"/>","darkswarm":"<circle cx=\"10.20\" cy=\"6.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"12.80\" cy=\"6.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"15.40\" cy=\"6.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"6.30\" cy=\"8.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"8.90\" cy=\"8.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"11.50\" cy=\"8.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"14.10\" cy=\"8.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"16.70\" cy=\"8.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"5.00\" cy=\"11.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"7.60\" cy=\"11.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"10.20\" cy=\"11.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"12.80\" cy=\"11.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"15.40\" cy=\"11.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"18.00\" cy=\"11.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"6.30\" cy=\"13.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"8.90\" cy=\"13.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"11.50\" cy=\"13.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"14.10\" cy=\"13.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"16.70\" cy=\"13.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"19.30\" cy=\"13.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"7.60\" cy=\"16.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"10.20\" cy=\"16.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"12.80\" cy=\"16.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"15.40\" cy=\"16.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"18.00\" cy=\"16.20\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"11.50\" cy=\"18.70\" r=\"0.85\" fill=\"#2b2e31\"/><circle cx=\"14.10\" cy=\"18.70\" r=\"0.85\" fill=\"#2b2e31\"/>","ravburrow":"<ellipse cx=\"12.5\" cy=\"15\" rx=\"7.2\" ry=\"3.2\" fill=\"#2b2e31\"/><polygon points=\"5.300000000000001,13.200000000000001 6.4,9.4 7.5,13.200000000000001\" fill=\"#2b2e31\"/><polygon points=\"8.3,12.8 9.4,8.1 10.5,12.8\" fill=\"#2b2e31\"/><polygon points=\"11.4,12.4 12.5,6.8 13.6,12.4\" fill=\"#2b2e31\"/><polygon points=\"14.5,12.8 15.6,8.1 16.7,12.8\" fill=\"#2b2e31\"/><polygon points=\"17.5,13.200000000000001 18.6,9.4 19.700000000000003,13.200000000000001\" fill=\"#2b2e31\"/>","stationary":"<circle cx=\"12.5\" cy=\"6.8\" r=\"1.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"12.5\" y1=\"8.3\" x2=\"12.5\" y2=\"19.6\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"9\" y1=\"11\" x2=\"16\" y2=\"11\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M6.4 15 Q7.2 20 12.5 19.8 Q17.8 20 18.6 15\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"};
 const TOK_CAT = [{"id":"hidden","f":"G","ic":"hidden","t":"HIDDEN","col":"#fafafa","round":false,"s":"Zeratul (One with the Shadows), Stalker & Nerazim Watchers (Path of Shadows), Nerazim faction (Darkness Descends), Void Seeker (Anakh Su'n)"},{"id":"guardian","f":"P","ic":"guardian","t":"GUARDIAN SHIELD","col":"#ffdd1a","round":false,"s":"Sentry, until End of Round: ranged attacks on friendlies within 4\" get 1 fewer die"},{"id":"sword","f":"P","ic":"sword","t":"SENTENCED TO DEATH","col":"#ffdd1a","round":false,"s":"Zeratul, on an enemy unit: his melee gains CRITICAL HIT (2) against it"},{"id":"voidprison","f":"P","ic":"voidprison","t":"VOID PRISON","col":"#ffdd1a","round":true,"s":"Zeratul, Faction Indicator: enemies within 2\" get DEBUFF Speed (2)"},{"id":"feedback","f":"P","ic":"feedback","t":"FEEDBACK","col":"#ffdd1a","round":false,"s":"High Templar, Twilight Templar: enemy Mechanical/Psionic unit takes NON-LETHAL DAMAGE (3) after each Active/Reaction ability this round"},{"id":"farsight","f":"P","ic":"farsight","t":"FARSIGHT","col":"#ffdd1a","round":false,"s":"High Templar upgrade: a friendly unit may Evade all attacks until End of Round"},{"id":"khala","f":"P","ic":"khala","t":"KHALA'S GIFT","col":"#ffdd1a","round":false,"s":"Tassadar: target friendly unit's first Special Ability this round costs 1 less"},{"id":"nerazim","f":"P","ic":"nerazim","t":"MIGHT OF THE NERAZIM","col":"#ffdd1a","round":false,"s":"Nerazim faction card: a unit that loses Hidden gains BUFF Speed (2) and its first weapon CRITICAL HIT (2)"},{"id":"observer","f":"P","ic":"observer","t":"OBSERVER","col":"#ffdd1a","round":true,"s":"Observer tactical card (Surveillance), Faction Indicator: enemies within 6\" lose Hidden"},{"id":"conduit","f":"P","ic":"conduit","t":"WARP CONDUIT","col":"#ffdd1a","round":true,"s":"Warp Prism tactical card, Faction Indicator: deploy a ground unit next to it at End of Round"},{"id":"executor","f":"P","ic":"executor","t":"EXECUTOR'S WILL","col":"#ffdd1a","round":true,"s":"Tassadar, a Faction Indicator next to each of two enemy units"},{"id":"txt:SPD:+2:P","f":"P","t":"SPD +2","s":"Chronoboosted Gate (Zealous Charge): BUFF Speed (2)"},{"id":"txt:ROA:+1:P","f":"P","t":"ROA +1","s":"BUFF RoA (1), Adept upgrade (Resonating Glaives). Optional: usually spent in the same activation"},{"id":"stim","f":"T","ic":"stim","t":"STIMPACK","col":"#6f9fd8","round":false,"s":"Marine, Raynor's Raider, Marauder, Spec Ops Marauder (Commando), Nova (Super Stimpack): BUFF Speed + PRECISION until End of Round"},{"id":"shield","f":"T","ic":"shield","t":"COMBAT SHIELD","col":"#6f9fd8","round":false,"s":"Marine upgrade: may Evade melee attacks and ability damage"},{"id":"retreat","f":"T","ic":"retreat","t":"TACTICAL RETREAT","col":"#6f9fd8","round":false,"s":"Terran Armed Forces faction card: no Disengage penalty this round"},{"id":"orders","f":"T","ic":"orders","t":"CRITICAL HIT ORDER","col":"#6f9fd8","round":false,"s":"Jim Raynor's Orders, 1 CP option only: another unit's first weapon used gains CRITICAL HIT (2). His other orders need no token"},{"id":"markdeath","f":"T","ic":"markdeath","t":"MARK FOR DEATH","col":"#6f9fd8","round":false,"s":"Nova Covert Ops faction card, on an enemy unit: CRITICAL HIT (1) + PRECISION (1) against it"},{"id":"lock","f":"T","ic":"lock","t":"TARGET LOCK","col":"#6f9fd8","round":false,"s":"Goliath, on an enemy unit: Autocannon gets Surge Light/Armoured D3+1"},{"id":"flare","f":"T","ic":"flare","t":"OPTICAL FLARE","col":"#6f9fd8","round":false,"s":"Medic, enemy unit until End of Round: DEBUFF Range (4) and no LONG RANGE"},{"id":"seeker","f":"T","ic":"seeker","t":"SEEKER MISSILE","col":"#6f9fd8","round":false,"s":"Raven upgrade, on an enemy unit: HITS 4 (2) at End of Assault Phase if it stays still or within 8\""},{"id":"spotter","f":"T","ic":"spotter","t":"COORDINATED STRIKE","col":"#6f9fd8","round":false,"s":"Siege Tank upgrade: a friendly unit becomes the spotter for the Shock Cannon this round"},{"id":"depot","f":"T","ic":"depot","t":"SUPPLY DEPOT","col":"#6f9fd8","round":false,"s":"Supply Depot tactical card: the unit counts +1 Supply for Mission Markers"},{"id":"scan","f":"T","ic":"scan","t":"SCANNER SWEEP","col":"#6f9fd8","round":true,"s":"Orbital Command, Faction Indicator: enemies within 6\" lose Hidden"},{"id":"dustoff","f":"T","ic":"dustoff","t":"DUST-OFF","col":"#6f9fd8","round":true,"s":"Dropship (Ready for Dust-Off), Faction Indicator: deploy a ground unit next to it at End of Round"},{"id":"comsat","f":"T","ic":"comsat","t":"COMSAT","col":"#6f9fd8","round":false,"s":"Orbital Command (Comsat Station): enemies cannot deploy from that table edge this round"},{"id":"txt:SPD:-2:T","f":"T","t":"SPD -2","s":"Marauder (Concussive Shells): DEBUFF Speed (2)"},{"id":"txt:SPD:-3:T","f":"T","t":"SPD -3","s":"Spec Ops Marauder (Suppression Shells): DEBUFF Speed (3)"},{"id":"txt:ARM:-1:T","f":"T","t":"ARM -1","s":"Raven (Anti-Armour Missile): DEBUFF Armour (1)"},{"id":"burrowed","f":"Z","ic":"burrowed","t":"BURROWED","col":"#fafafa","round":false,"s":"Roach, Vile Roach, Corpser (Burrow), Hatchery (Lie in Wait), Zerg Swarm (Rapid Burrowing); a mode marker with STAY IN PLAY"},{"id":"mutation","f":"Z","ic":"mutation","t":"WILD MUTATION","col":"#a678c8","round":false,"s":"Kerrigan's Swarm faction card (on Creep): BUFF Speed (1) + first weapon PRECISION (1)"},{"id":"carapace","f":"Z","ic":"carapace","t":"MUTATING CARAPACE","col":"#a678c8","round":false,"s":"Kerrigan, on an enemy unit: she gets +2 Evade against its attacks"},{"id":"brood1","f":"Z","ic":"brood1","t":"BROODMOTHER: SIZE 1","col":"#a678c8","round":false,"s":"Zagara upgrade: all friendly units get the chosen effect; the same one can't be picked next round"},{"id":"brood2","f":"Z","ic":"brood2","t":"BROODMOTHER: SIZE 2","col":"#a678c8","round":false,"s":"All weapons of Size 2 units gain CRITICAL HIT (1)"},{"id":"brood3","f":"Z","ic":"brood3","t":"BROODMOTHER: SIZE 3+","col":"#a678c8","round":false,"s":"Size 3+ units gain TOUGH (1)"},{"id":"flag","f":"Z","ic":"flag","t":"DOMINEERING PRESENCE","col":"#a678c8","round":false,"s":"Queen upgrade: another unit counts +1 Supply for Mission Markers"},{"id":"poison","f":"Z","ic":"poison","t":"POISONOUS ESSENCE","col":"#a678c8","round":true,"s":"Defiler Mound, Faction Indicator on a friendly unit: engaged enemies take NON-LETHAL DAMAGE (2)"},{"id":"ventral","f":"Z","ic":"ventral","t":"VENTRAL SACS","col":"#a678c8","round":true,"s":"Overlord tactical card, Faction Indicator: deploy a ground unit next to it at End of Round"},{"id":"overseer","f":"Z","ic":"overseer","t":"OVERSEER","col":"#a678c8","round":true,"s":"Overseer tactical card (Oversight Mode): enemies within 6\" lose Hidden"},{"id":"corrosive","f":"Z","ic":"corrosive","t":"CORROSIVE BILE","col":"#a678c8","round":false,"s":"Ravager: one token per model, up to 2 per unit"},{"id":"bilebomb","f":"Z","ic":"bilebomb","t":"BILE BOMB","col":"#a678c8","round":false,"s":"Bile Launcher (Bombard); becomes a Creep Tumor when removed"},{"id":"darkswarm","f":"Z","ic":"darkswarm","t":"DARK SWARM","col":"#a678c8","round":false,"s":"Defiler (Gestate Dark Swarm, costs 0 BM, so it can be made more than once)"},{"id":"ravburrow","f":"Z","ic":"ravburrow","t":"RAVAGER BURROW","col":"#a678c8","round":false,"s":"Ravager (Deep Tunnel)"},{"id":"txt:HIT:-1:Z","f":"Z","t":"HIT -1","s":"Vileling (Debilitating Claws), Vile Roach (Debilitating Saliva): DEBUFF Hit (1)"},{"id":"txt:ARM:-1:Z","f":"Z","t":"ARM -1","s":"Ravager upgrade (Potent Bile): DEBUFF Armour (1)"},{"id":"txt:SPD:+1:Z","f":"Z","t":"SPD +1","s":"Roach, Corpser, Vile Roach (Glial Reconstitution): BUFF Speed (1)"},{"id":"txt:SPD:+2:Z","f":"Z","t":"SPD +2","s":"Glial Reconstitution on Creep: BUFF Speed (2)"},{"id":"stationary","f":"G","ic":"stationary","t":"STATIONARY","col":"#fafafa","round":false,"s":"The unit has not moved this round"}];
+TOK_ICONS.shade = "<path d=\"M7.5 19.5 V11 a5 5 0 0 1 10 0 V19.5 l-2.5 -2 -2.5 2 -2.5 -2 Z\" fill=\"#2b2e31\"/><ellipse cx=\"10.6\" cy=\"11.2\" rx=\"0.75\" ry=\"1.1\" fill=\"#ffdd1a\"/><ellipse cx=\"14.4\" cy=\"11.2\" rx=\"0.75\" ry=\"1.1\" fill=\"#ffdd1a\"/>";
+TOK_ICONS.tumor = "<circle cx=\"12.5\" cy=\"12.5\" r=\"3.9\" fill=\"#2b2e31\"/><path d=\"M16.50 12.50 Q19.09 14.18 20.06 16.15\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M15.33 15.33 Q15.97 18.35 15.26 20.43\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.50 16.50 Q10.82 19.09 8.85 20.06\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M9.67 15.33 Q6.65 15.97 4.57 15.26\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M8.50 12.50 Q5.91 10.82 4.94 8.85\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M9.67 9.67 Q9.03 6.65 9.74 4.57\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.50 8.50 Q14.18 5.91 16.15 4.94\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M15.33 9.67 Q18.35 9.03 20.43 9.74\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>";
+TOK_ICONS.siege = "<rect x=\"10\" y=\"8.6\" width=\"5\" height=\"2.8\" fill=\"#2b2e31\"/><line x1=\"14.6\" y1=\"9.6\" x2=\"20.4\" y2=\"7.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polygon points=\"7,15 18,15 16.6,12.2 8.4,12.2\" fill=\"#2b2e31\"/><line x1=\"8.2\" y1=\"15.2\" x2=\"6\" y2=\"18.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"16.8\" y1=\"15.2\" x2=\"19\" y2=\"18.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"11\" y1=\"15.2\" x2=\"10.5\" y2=\"18.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"14\" y1=\"15.2\" x2=\"14.5\" y2=\"18.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>";
+TOK_CAT.push({ id: 'siege', f: 'T', ic: 'siege', t: 'SIEGE MODE', col: '#6f9fd8', round: false, s: 'Siege Tank: in Siege Mode' });
+TOK_CAT.push({ id: 'shade', f: 'P', ic: 'shade', t: 'SHADE', col: '#ffdd1a', round: true, place: true, mm: 40, s: 'Adept: its Shade, a see-through copy of the Adept on a 40 mm base. Right-click an Adept to place one next to it' });
+TOK_CAT.push({ id: 'tumor', f: 'Z', ic: 'tumor', t: 'CREEP TUMOR', col: '#a678c8', round: true, place: true, mm: 32, s: 'Zerg: a Creep Tumor on a 32 mm token', any: 'Z' });
+TOK_CAT.push({ id: 'forcefield', f: 'P', ic: 'guardian', t: 'FORCE FIELD', col: '#ffdd1a', round: true, place: true, mm: 80, s: 'Sentry: an 80 mm Force Field placed on the battlefield' });
 const TOK_FACTIONS = { P: ['Protoss', '#ffdd1a'], T: ['Terran', '#6f9fd8'], Z: ['Zerg', '#a678c8'], G: ['Any faction', '#fafafa'] };
 const TOK_INK = '#2b2e31', TOK_STATS = ['SPD', 'ARM', 'EVA', 'HIT', 'ROA', 'RNG'];
 const TOK_SIZE = 25 * MM;   // a 25 mm token, true to scale on the table
@@ -2961,7 +3067,7 @@ function openTokPick(u, x, y) {
 	const order = fac ? [fac, 'G', ...['P', 'T', 'Z'].filter(f => f !== fac)] : ['P', 'T', 'Z', 'G'];
 	const item = c => `<button data-tok="${esc(c.id)}" title="${esc(c.s)}">${tokSvg(c.id, 34)}<span>${esc(c.t)}</span></button>`;
 	tokPick.innerHTML = `<div class="tph"><b>Token for ${esc(u.name)}</b><button class="btn" data-close aria-label="Close">✕</button></div>
-		${order.map((f, i) => `<details ${!fac || i < 2 ? 'open' : ''}><summary>${TOK_FACTIONS[f][0]}</summary><div class="tpgrid">${TOK_CAT.filter(c => c.f === f).map(item).join('')}</div></details>`).join('')}
+		${tokSections(TOK_CAT.filter(c => !c.place), item, order, armyNames([u.player]), armyFactions([u.player]), !fac || true)}
 		<div class="tpmake"><span class="note">Buff / Debuff</span>
 			<select id="tpStat" aria-label="Stat">${TOK_STATS.map(t => `<option>${t}</option>`).join('')}</select>
 			<select id="tpVal" aria-label="Value">${['+1', '+2', '+3', '+4', '-1', '-2', '-3', '-4'].map(v => `<option value="${v}">${v.replace('-', '−')}</option>`).join('')}</select>
@@ -2972,8 +3078,83 @@ function openTokPick(u, x, y) {
 	tokPick.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
 	tokPick.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
 }
+function armyNames(players) {
+	const out = new Set(), add = t => { const k = String(t || '').toLowerCase().replace(/[’`]/g, "'").trim(); if (k.length >= 3) out.add(k.replace(/s$/, '')); };
+	for (const u of state.units) {
+		if (!players.includes(u.player) || !state.minis.some(m => m.unit === u.id && !m.tok)) continue;
+		add(libCard(u.card)?.name); add(u.name); (u.upgrades || []).forEach(add);
+	}
+	for (const t of state.tactics) if (players.includes(t.player)) { add(libCard(t.card)?.name); add(t.name); }
+	// words every token text has would make every token relevant
+	return [...out].filter(n => !['unit', 'model', 'card', 'faction', 'enemy', 'friendly', 'token', 'hidden'].includes(n));
+}
+function armyFactions(players) {
+	const by = { Protoss: 'P', Terran: 'T', Zerg: 'Z' }, out = new Set();
+	for (const u of state.units) if (players.includes(u.player)) { const f = by[libCard(u.card)?.faction]; if (f) out.add(f); }
+	return out;
+}
+function relevantTok(c, names, facs) {
+	if (c.any && facs.has(c.any)) return true;
+	const s = (c.s || '').toLowerCase().replace(/[’`]/g, "'");
+	return names.some(n => s.includes(n));
+}
+// the picker's body: the army's tokens first, everything else behind "Show all tokens"
+function tokSections(list, item, order, names, facs, openFirst) {
+	const rel = list.filter(c => c.f !== 'G' && relevantTok(c, names, facs)), gen = list.filter(c => c.f === 'G');
+	const all = order.map((f, i) => `<details ${openFirst && i < 2 ? 'open' : ''}><summary>${TOK_FACTIONS[f][0]}</summary><div class="tpgrid">${list.filter(c => c.f === f).map(item).join('')}</div></details>`).join('');
+	if (!rel.length) return all;
+	return `<div class="tprel"><div class="note" style="padding:4px 0">For this army</div><div class="tpgrid">${rel.concat(gen).map(item).join('')}</div></div>
+		<details class="tpall"><summary>Show all tokens</summary>${all.replace(/<details open>/g, '<details>')}</details>`;
+}
+// which player plays a faction, from their units' cards (Player 1 when nobody does)
+function playerOfFaction(f) {
+	const name = TOK_FACTIONS[f]?.[0];
+	for (const i of [0, 1]) if (state.units.some(u => u.player === i && libCard(u.card)?.faction === name && state.minis.some(m => m.unit === u.id && !m.tok))) return i;
+	return 0;
+}
+function openTokPlace(px, pz, x, y) {
+	const item = c => `<button data-place="${esc(c.id)}" title="${esc(c.s)}">${tokSvg(c.id, 34)}<span>${esc(c.t)}${c.mm ? ` · ${c.mm} mm` : ''}</span></button>`;
+	tokPick.innerHTML = `<div class="tph"><b>Faction token on the table</b><button class="btn" data-close aria-label="Close">✕</button></div>
+		<div class="tpside"><span class="note">For</span>${state.players.map((p, i) => `<button class="btn" data-side="${i}" aria-pressed="false"><span class="swatch" style="background:${p.color}"></span> ${esc(p.name)}</button>`).join('')}<span class="note">(else whoever plays that faction)</span></div>
+		${tokSections(TOK_CAT.filter(c => c.round), item, ['P', 'T', 'Z'], armyNames([0, 1]), armyFactions([0, 1]), true)}`;
+	tokPick.dataset.unit = ''; tokPick.dataset.px = px; tokPick.dataset.pz = pz; tokPick.dataset.side = '';
+	tokPick.hidden = false;
+	const r = tokPick.getBoundingClientRect();
+	tokPick.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
+	tokPick.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + 'px';
+}
+function placeShade(a) {
+	const r = 40 * MM / 2, spot = findSpotNear(a.x + radius(a) + r + 0.3, a.z, r), src = findUnit(a.unit), unit = newId('u');
+	state.units.push(normUnit({ id: unit, name: 'Shade', player: a.player, supply: 0, card: src?.card || null }));
+	const m = normMini({ id: newId('m'), name: 'Shade', player: a.player, baseMm: 40, img: a.img, x: spot.x, z: spot.z, unit, tok: 'shade' });
+	state.minis.push(m); addMiniObj(m);
+	undoStack.push({ t: 'add', ids: [m.id] });
+	renderLists(); select('mini', m.id); save();
+	toast(`Shade placed next to ${esc(a.name)}`);
+}
+function placeToken(id, x, z, player) {
+	const k = tokInfo(id); if (!k) return;
+	const baseMm = k.mm || 32, r = baseMm * MM / 2;
+	const spot = findSpotNear(Math.min(state.table.w / 2 - r, Math.max(-state.table.w / 2 + r, x)), Math.min(state.table.d / 2 - r, Math.max(-state.table.d / 2 + r, z)), r);
+	const name = k.t.charAt(0) + k.t.slice(1).toLowerCase(), unit = newId('u');
+	state.units.push(normUnit({ id: unit, name, player, supply: 0 }));
+	const m = normMini({ id: newId('m'), name, player, baseMm, x: spot.x, z: spot.z, unit, tok: id });
+	state.minis.push(m); addMiniObj(m);
+	state.example = false;
+	undoStack.push({ t: 'add', ids: [m.id] });
+	renderLists(); select('mini', m.id); save();
+	toast(`${esc(name)} placed for ${esc(state.players[player].name)}`);
+}
 tokPick.addEventListener('click', e => {
 	if (e.target.closest('[data-close]')) { tokPick.hidden = true; return; }
+	const side = e.target.closest('button[data-side]');
+	if (side) { tokPick.dataset.side = side.dataset.side; tokPick.querySelectorAll('[data-side]').forEach(b => b.setAttribute('aria-pressed', String(b === side))); return; }
+	const pl = e.target.closest('button[data-place]');
+	if (pl) {
+		const k = tokInfo(pl.dataset.place);
+		placeToken(pl.dataset.place, +tokPick.dataset.px, +tokPick.dataset.pz, tokPick.dataset.side === '' ? playerOfFaction(k.f) : +tokPick.dataset.side);
+		tokPick.hidden = true; return;
+	}
 	const u = findUnit(tokPick.dataset.unit); if (!u) { tokPick.hidden = true; return; }
 	const b = e.target.closest('button[data-tok]');
 	if (b) { addToken(u, b.dataset.tok); return; }
@@ -2991,7 +3172,7 @@ function objectiveCounts() {
 	for (const [n, v] of markerViz) {
 		const units = [new Set(), new Set()], minis = [];
 		for (const m of state.minis) {
-			if (m.reserve || isDead(m)) continue;
+			if (m.reserve || m.tok || isDead(m)) continue;
 			const pos = objs.get(m.id)?.g.position || m;
 			if (Math.hypot(pos.x - v.px, pos.z - v.pz) - radius(m) - MARKER_R <= 3 + 1e-6) { units[m.player].add(m.unit); minis.push(m.id); }
 		}
@@ -3103,7 +3284,7 @@ function renderLists() {
 	// models listed under their unit; a unit's header selects the whole unit
 	const row = (m, member) => `<li data-id="${m.id}" class="${member ? 'member ' : ''}${multi.has(m.id) ? 'sel' : ''}${m.reserve ? ' reserved' : ''}">${thumbHtml(m)}<span class="nm">${esc(m.name)}</span><span class="mm">${m.baseMm} mm</span><button class="x" data-del="${m.id}" aria-label="Remove ${esc(m.name)}">✕</button></li>`;
 	const groups = state.players.map((p, i) => {
-		const ms = state.minis.filter(m => m.player === i);
+		const ms = state.minis.filter(m => m.player === i && !m.tok);   // faction tokens are not units
 		const order = [];
 		for (const m of ms) if (!order.includes(m.unit)) order.push(m.unit);
 		const body = order.map(uid => {
@@ -3125,6 +3306,7 @@ function aliveModels(u) {
 // supply a unit counts now: with a card, its models / supply band for the models still alive (below the smallest
 // band, the smallest band's supply), never more than the supply set on the unit; without a card, the unit's supply
 function unitSupply(u) {
+	if (state.minis.some(m => m.unit === u.id && m.tok)) return 0;   // a faction token, a Shade
 	const c = libCard(u.card);
 	if (!c?.modelsSupply?.length) return u.supply;
 	const n = aliveModels(u).length;
@@ -4269,7 +4451,7 @@ const rollsCol = () => net.db.collection('games/' + net.code + '/rolls');
 function pieceDoc(it, kind) {
 	if (kind === 'unit') return { kind, name: it.name, player: it.player, supply: it.supply, card: it.card, upgrades: it.upgrades, coh: it.coh, glow: it.glow ?? null, hp: it.hp ?? null, sh: it.sh ?? null, tokens: it.tokens || [] };
 	return kind === 'mini'
-		? { kind, name: it.name, player: it.player, baseMm: it.baseMm, img: it.img, x: r3(it.x), z: r3(it.z), unit: it.unit, reserve: it.reserve, dmgH: it.dmgH || 0, dmgS: it.dmgS || 0 }
+		? { kind, name: it.name, player: it.player, baseMm: it.baseMm, img: it.img, x: r3(it.x), z: r3(it.z), unit: it.unit, reserve: it.reserve, dmgH: it.dmgH || 0, dmgS: it.dmgS || 0, tok: it.tok || null }
 		: { kind, w: it.w, d: it.d, h: it.h, x: r3(it.x), z: r3(it.z), rot: r3(it.rot), name: it.name, shape: it.shape, cls: it.cls };
 }
 function metaDoc(s) { return { table: { w: s.table.w, d: s.table.d, mat: s.table.mat, deploy: s.table.deploy, lockTerrain: s.table.lockTerrain }, tactics: s.tactics, players: s.players.map(p => ({ name: p.name, color: p.color })), score: { round: s.score.round, sd: s.score.sd, ms: s.score.ms, avail: s.score.avail, kills: s.score.kills }, ctl: s.ctl, clock: s.clock }; }
@@ -4452,7 +4634,7 @@ function applyRemotePiece(id, b) {
 		return;
 	}
 	if (ex) {
-		const rebuild = ex.baseMm !== item.baseMm || ex.reserve !== item.reserve || !objs.get(id), face = ex.img !== item.img || ex.name !== item.name || ex.player !== item.player || ex.dmgH !== item.dmgH || ex.dmgS !== item.dmgS;
+		const rebuild = ex.baseMm !== item.baseMm || ex.reserve !== item.reserve || !objs.get(id), face = ex.img !== item.img || ex.name !== item.name || ex.player !== item.player || ex.dmgH !== item.dmgH || ex.dmgS !== item.dmgS || ex.tok !== item.tok;
 		Object.assign(ex, item);
 		if (rebuild) rebuildMini(ex);   // also brings a model onto the table from reserves, or takes it off
 		else { objs.get(id)?.g.position.set(ex.x, 0, ex.z); if (face) refreshFace(objs.get(id)); }

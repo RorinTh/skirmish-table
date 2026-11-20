@@ -16,7 +16,11 @@ With a deployment chosen, a model whose base is within 3″ of a Mission Marker 
 
 ## Tokens
 
-Units can carry tokens: right-click a model and choose **Add token…**, or use **+ Token** on the selected model's card. The picker lists the tokens of the unit's faction first (Protoss, Terran, Zerg), then the ones any faction uses (Hidden, Stationary), and has a Buff/Debuff maker (stat and value). Tokens show at 25 mm above the unit's first model on the table. Click a token on the card to take it off, or **Clear** to take them all off; Undo puts them back. The token symbols are drawn for this page.
+Units can carry tokens: right-click a model and choose **Add token…**, or use **+ Token** on the selected model's card. The picker lists the tokens of the unit's faction first (Protoss, Terran, Zerg), then the ones any faction uses (Hidden, Stationary), and has a Buff/Debuff maker (stat and value). Tokens show at 25 mm above the unit's first model on the table. The picker shows the tokens the army on the table uses first (from its unit cards, upgrades, faction and tactical cards), with **Show all tokens** for the rest. Click a token on the card to take it off, or **Clear** to take them all off; Undo puts them back. The token symbols are drawn for this page.
+
+### Tokens on the table
+
+Right-click an empty spot of the table and choose **Place faction token here…** for a Faction Indicator (32 mm), a Force Field (80 mm), a Shade (40 mm) or a Creep Tumor (32 mm). Right-click an Adept and choose **Place Shade** for a see-through copy of it next to it. These pieces are not units: they count no supply and do not contest Mission Markers. Drag them anywhere; while one is selected, the distance to every model, Mission Marker and terrain piece shows.
 
 ## Online play
 
