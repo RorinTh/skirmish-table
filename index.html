@@ -1178,6 +1178,7 @@ const DEPLOYMENTS = {
 const SIDE = { red: 0xe5484d, blue: 0x3b82f6 }, MARKER_COLOR = { 1: '#e5484d', 3: '#e5484d', 2: '#3b82f6', 4: '#3b82f6', 5: '#34b36a' };
 const MARKER_R = 40 * MM / 2;   // a 40 mm Mission Marker
 const MGLOW_W = 1.1;            // the glow of a controlled marker reaches this far beyond its edge
+let selMarker = null;           // the Mission Marker clicked last (its number), or null
 const markerViz = new Map();    // marker number -> its glow and supply label on the table
 let objSig = '';                // what the markers showed last time, to redraw only on a change
 let markerGlowTex = null;
@@ -1239,7 +1240,9 @@ function deploymentGroup() {
 		const label = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6 * 80 / 256).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: ltex, transparent: true, depthWrite: false, depthTest: false }));
 		// just outside the top of the 3" ring, drawn over models and terrain
 		label.position.set(px, 0.03, Math.max(-state.table.d / 2 + 0.5, pz - MARKER_R - 3.6)); label.visible = false; label.renderOrder = 10; g.add(label);
-		markerViz.set(n, { px, pz, glow, label, lcv, ltex });
+		const selRing = new THREE.Mesh(new THREE.RingGeometry(MARKER_R + 0.04, MARKER_R + 0.16, 72).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xf3c33c, transparent: true, depthWrite: false }));
+		selRing.position.set(px, 0.025, pz); selRing.visible = String(selMarker) === String(n); selRing.renderOrder = 9; g.add(selRing);
+		markerViz.set(n, { px, pz, glow, label, lcv, ltex, selRing });
 		const ring = new THREE.Mesh(new THREE.RingGeometry(MARKER_R + 3 - 0.03, MARKER_R + 3 + 0.03, 96).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: MARKER_COLOR[n], transparent: true, opacity: 0.55, depthWrite: false }));
 		ring.position.set(px, 0.012, pz); g.add(ring);
 	}
@@ -2026,9 +2029,28 @@ function fmt(inches) {
 
 // base-to-base distance from the selected base to every other base, refreshed every frame
 const distLabels = new Map();   // mini id -> label
+function selectMarker(n) {
+	selMarker = n;
+	for (const [k, v] of markerViz) v.selRing.visible = String(k) === String(n);
+}
 function updateDistances() {
 	const s = sel?.kind === 'mini' ? findMini(sel.id) : null;
 	const seen = new Set();
+	const mk = !s && selMarker !== null ? markerViz.get(String(selMarker)) || markerViz.get(selMarker) : null;
+	if (mk) {   // a selected Mission Marker: from its edge to the edge of every base on the table
+		for (const m of state.minis) {
+			if (m.reserve) continue;
+			seen.add(m.id);
+			let L = distLabels.get(m.id);
+			if (!L) { L = makeLabel('dist'); distLabels.set(m.id, L); }
+			const r = radius(m), txt = fmt(Math.max(0, Math.hypot(m.x - mk.px, m.z - mk.pz) - MARKER_R - r));
+			if (L.text !== txt) { L.text = txt; L.el.textContent = txt; }
+			const fs = Math.round(Math.min(20, Math.max(9, 2 * r * pxPerIn * 0.3)));
+			if (L.fs !== fs) { L.fs = fs; L.el.style.fontSize = fs + 'px'; }
+			L.center = true; L.on = true;
+			L.pos.set(m.x, BASE_H, m.z);
+		}
+	}
 	if (s) {
 		const rs = radius(s);
 		for (const m of state.minis) {
@@ -2045,7 +2067,7 @@ function updateDistances() {
 			L.pos.set(m.x, BASE_H, m.z);
 		}
 	}
-	if (s?.tok) {
+	if (s && !s.reserve) {
 		const rs = radius(s), put = (key, txt, x, z, fs) => {
 			seen.add(key);
 			let L = distLabels.get(key);
@@ -2056,7 +2078,7 @@ function updateDistances() {
 		};
 		const fsM = Math.round(Math.min(18, Math.max(9, 2 * MARKER_R * pxPerIn * 0.3)));
 		for (const [n, v] of markerViz) put('mk' + n, fmt(Math.max(0, Math.hypot(v.px - s.x, v.pz - s.z) - rs - MARKER_R)), v.px, v.pz, fsM);
-		for (const t of state.terrain) {
+		if (s.tok) for (const t of state.terrain) {
 			const q = terrainNearest(t, s.x, s.z);
 			put('tr' + t.id, fmt(Math.max(0, q.d - rs)), q.x, q.z, 12);
 		}
@@ -2273,7 +2295,9 @@ function onUp(e) {
 		measure.active = false;
 		if (down?.click) { measure = null; updateMeasure(); }
 	} else if (down?.click && mode === 'move' && e.type === 'pointerup') {
+		const tp = tablePoint(e), mk = tp && [...markerViz].find(([, v]) => Math.hypot(tp.x - v.px, tp.z - v.pz) <= MARKER_R);
 		select(null);
+		if (mk) selectMarker(mk[0]);
 	}
 	down = null;
 	controls.enabled = true;
@@ -2642,16 +2666,19 @@ function refreshSelection() {
 	document.querySelectorAll('.ulist li[data-id]').forEach(li => li.classList.toggle('sel', multi.has(li.dataset.id) || sel?.id === li.dataset.id));
 }
 function select(kind, id) {
+	if (selMarker !== null) selectMarker(null);
 	sel = kind ? { kind, id } : null;
 	multi = new Set(kind === 'mini' ? [id] : []);
 	refreshSelection();
 }
 function selectMany(ids) {
+	if (selMarker !== null) selectMarker(null);
 	multi = new Set(ids.filter(id => findMini(id)));
 	sel = multi.size ? { kind: 'mini', id: [...multi][0] } : null;
 	refreshSelection();
 }
 function toggleMulti(id) {
+	if (selMarker !== null) selectMarker(null);
 	if (sel?.kind === 'terrain') multi = new Set();
 	multi.has(id) ? multi.delete(id) : multi.add(id);
 	sel = multi.size ? { kind: 'mini', id: multi.has(id) ? id : [...multi][0] } : null;
