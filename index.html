@@ -1152,7 +1152,7 @@ function disposeTree(o, keep) {
 	o.traverse(n => {
 		n.geometry?.dispose();
 		const ms = Array.isArray(n.material) ? n.material : (n.material ? [n.material] : []);
-		ms.forEach(m => { if (m.map && m.map !== keep) m.map.dispose(); m.dispose(); });
+		ms.forEach(m => { if (m.map && m.map !== keep && !m.map.userData.shared) m.map.dispose(); m.dispose(); });   // shared textures stay
 	});
 }
 
@@ -1829,12 +1829,99 @@ function addMiniObj(m) {
 	return o;
 }
 // a terrain piece: its footprint in its Size class colour (block, round, corner or a see-through grass patch)
+// ---- terrain surfaces: a grey detail texture per kind of piece, tinted by the piece's Size colour and laid in
+// table inches (one tile = 4"), so a big piece shows more of it instead of a stretched copy
+const TER_TILE = 4;
+const terrainTextures = new Map();
+function terrainTexture(cls) {
+	if (terrainTextures.has(cls)) return terrainTextures.get(cls);
+	const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S;
+	const x = cv.getContext('2d'), R = seeded(9173 + String(cls).charCodeAt(0) * 131);
+	const px = S / TER_TILE;   // pixels per inch
+	const speckle = (n, lo, hi, rmax) => { for (let i = 0; i < n; i++) { const v = lo + R() * (hi - lo) | 0; x.fillStyle = `rgb(${v},${v},${v})`; x.beginPath(); x.arc(R() * S, R() * S, 0.6 + R() * rmax, 0, 7); x.fill(); } };
+	// a crack: a jagged line wandering from a random point
+	const crack = (len, w, v) => {
+		let cx = R() * S, cy = R() * S, a = R() * Math.PI * 2;
+		x.strokeStyle = `rgb(${v},${v},${v})`; x.lineWidth = w; x.lineCap = 'round'; x.beginPath(); x.moveTo(cx, cy);
+		for (let i = 0; i < len; i++) { a += (R() - 0.5) * 1.1; cx += Math.cos(a) * 9; cy += Math.sin(a) * 9; x.lineTo(cx, cy); }
+		x.stroke();
+	};
+	if (cls === '0') {          // scatter: rubble and gravel
+		x.fillStyle = 'rgb(214,214,214)'; x.fillRect(0, 0, S, S);
+		speckle(2600, 150, 255, 1.6);
+		for (let i = 0; i < 70; i++) {   // stones, lit from the top left
+			const r = 4 + R() * 14, cx = R() * S, cy = R() * S, v = 170 + R() * 70 | 0;
+			x.fillStyle = 'rgba(0,0,0,0.28)'; x.beginPath(); x.ellipse(cx + r * 0.25, cy + r * 0.3, r, r * 0.8, R() * 3, 0, 7); x.fill();
+			x.fillStyle = `rgb(${v},${v},${v})`; x.beginPath(); x.ellipse(cx, cy, r, r * 0.8, R() * 3, 0, 7); x.fill();
+		}
+	} else if (cls === '1') {   // low cover: concrete slabs with seams, pits and cracks
+		x.fillStyle = 'rgb(226,226,226)'; x.fillRect(0, 0, S, S);
+		speckle(3200, 185, 250, 1.2);
+		speckle(500, 120, 170, 1.4);
+		for (let i = 0; i < 10; i++) crack(10 + R() * 18, 1.8, 105);
+		x.strokeStyle = 'rgb(95,95,95)'; x.lineWidth = 3.5;
+		for (let k = 0; k <= TER_TILE; k += 2) { x.beginPath(); x.moveTo(k * px, 0); x.lineTo(k * px, S); x.moveTo(0, k * px); x.lineTo(S, k * px); x.stroke(); }
+		x.strokeStyle = 'rgba(255,255,255,0.5)'; x.lineWidth = 1.5;
+		for (let k = 0; k <= TER_TILE; k += 2) { x.beginPath(); x.moveTo(k * px + 3, 0); x.lineTo(k * px + 3, S); x.moveTo(0, k * px + 3); x.lineTo(S, k * px + 3); x.stroke(); }
+	} else if (cls === '2') {   // blocks sight: armoured plating with seams, rivets and scuffs
+		x.fillStyle = 'rgb(220,220,220)'; x.fillRect(0, 0, S, S);
+		const plates = [[0, 0, 2, 1], [2, 0, 2, 1], [0, 1, 1, 2], [1, 1, 3, 1], [1, 2, 1.5, 1], [2.5, 2, 1.5, 1], [0, 3, 2.5, 1], [2.5, 3, 1.5, 1]];
+		for (const [a, b, w, h] of plates) {
+			const v = 196 + R() * 46 | 0;
+			x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(a * px, b * px, w * px, h * px);
+			x.strokeStyle = 'rgb(110,110,110)'; x.lineWidth = 3; x.strokeRect(a * px + 1.5, b * px + 1.5, w * px - 3, h * px - 3);
+			x.strokeStyle = 'rgba(255,255,255,0.55)'; x.lineWidth = 1.5; x.beginPath(); x.moveTo(a * px + 4, (b + h) * px - 4); x.lineTo(a * px + 4, b * px + 4); x.lineTo((a + w) * px - 4, b * px + 4); x.stroke();
+			for (const [rx, ry] of [[a + 0.12, b + 0.12], [a + w - 0.12, b + 0.12], [a + 0.12, b + h - 0.12], [a + w - 0.12, b + h - 0.12]]) {
+				x.fillStyle = 'rgb(120,120,120)'; x.beginPath(); x.arc(rx * px + 1, ry * px + 1, 3.4, 0, 7); x.fill();
+				x.fillStyle = 'rgb(250,250,250)'; x.beginPath(); x.arc(rx * px - 0.6, ry * px - 0.6, 2.2, 0, 7); x.fill();
+			}
+		}
+		for (let i = 0; i < 40; i++) { x.strokeStyle = `rgba(${R() < 0.5 ? '255,255,255' : '90,90,90'},0.35)`; x.lineWidth = 1; const cx = R() * S, cy = R() * S, a = R() * 3; x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a) * (8 + R() * 26), cy + Math.sin(a) * (8 + R() * 26)); x.stroke(); }
+		speckle(900, 170, 240, 0.9);
+	} else if (cls === '3') {   // high ground: weathered rock with fissures
+		x.fillStyle = 'rgb(205,205,205)'; x.fillRect(0, 0, S, S);
+		for (let i = 0; i < 260; i++) { const v = 160 + R() * 90 | 0, r = 6 + R() * 26; x.fillStyle = `rgba(${v},${v},${v},0.35)`; x.beginPath(); x.ellipse(R() * S, R() * S, r, r * (0.5 + R() * 0.5), R() * 3, 0, 7); x.fill(); }
+		speckle(2400, 140, 245, 1.3);
+		for (let i = 0; i < 18; i++) crack(8 + R() * 22, 2.4 + R() * 2, 70);
+		for (let i = 0; i < 10; i++) crack(6 + R() * 10, 1, 235);
+	} else {                    // grass: blades
+		x.fillStyle = 'rgb(205,205,205)'; x.fillRect(0, 0, S, S);
+		x.lineCap = 'round';
+		for (let i = 0; i < 2600; i++) {
+			const v = 150 + R() * 105 | 0, cx = R() * S, cy = R() * S, a = -Math.PI / 2 + (R() - 0.5) * 1.2, l = 5 + R() * 11;
+			x.strokeStyle = `rgb(${v},${v},${v})`; x.lineWidth = 1 + R() * 1.4;
+			x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a) * l, cy + Math.sin(a) * l); x.stroke();
+		}
+	}
+	const tex = new THREE.CanvasTexture(cv);
+	tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = maxAniso; tex.userData.shared = true;
+	terrainTextures.set(cls, tex);
+	return tex;
+}
+// texture coordinates in table inches: tops from x/z, sides along their face and up the height
+function inchUVs(geo, ox = 0, oz = 0, round = false) {
+	const pos = geo.attributes.position, nor = geo.attributes.normal, uv = geo.attributes.uv;
+	for (let i = 0; i < pos.count; i++) {
+		const px = pos.getX(i) + ox, py = pos.getY(i), pz = pos.getZ(i) + oz, nx = nor.getX(i), ny = nor.getY(i), nz = nor.getZ(i);
+		let u, v;
+		if (Math.abs(ny) > 0.5) { u = px; v = pz; }
+		else if (round) { u = Math.atan2(pz, px) * Math.hypot(px, pz); v = py; }
+		else if (Math.abs(nx) > Math.abs(nz)) { u = pz; v = py; }
+		else { u = px; v = py; }
+		uv.setXY(i, u / TER_TILE, v / TER_TILE);
+	}
+	uv.needsUpdate = true;
+	return geo;
+}
 function addTerrainObj(t) {
 	const c = TERRAIN_CLS[t.cls] || TERRAIN_CLS['2'], g = new THREE.Group(), edgeMat = new THREE.LineBasicMaterial({ color: 0x9aa7b8 }), parts = [];
-	const h = Math.max(0.05, t.h), solid = () => new THREE.MeshStandardMaterial({ color: c.color, roughness: 0.92 });
-	const addBox = (w, d, x, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), solid()); m.position.set(x, h / 2, z); parts.push(m); };
+	const h = Math.max(0.05, t.h), tex = terrainTexture(t.shape === 'grass' ? 'grass' : t.cls);
+	// dark Size colours need more light for their texture to show
+	const tint = new THREE.Color(c.color).multiplyScalar({ '3': 1.75, '2': 1.25, '1': 1.12 }[t.cls] || 1.2);
+	const solid = () => new THREE.MeshStandardMaterial({ color: tint, roughness: 0.9, map: tex, bumpMap: tex, bumpScale: 0.6 });
+	const addBox = (w, d, x, z) => { const m = new THREE.Mesh(inchUVs(new THREE.BoxGeometry(w, h, d), x, z), solid()); m.position.set(x, h / 2, z); parts.push(m); };
 	if (t.shape === 'circle') {
-		const m = new THREE.Mesh(new THREE.CylinderGeometry(t.w / 2, t.w / 2, h, 48), solid());
+		const m = new THREE.Mesh(inchUVs(new THREE.CylinderGeometry(t.w / 2, t.w / 2, h, 48), 0, 0, true), solid());
 		m.scale.z = t.d / t.w; m.position.y = h / 2; parts.push(m);
 	} else if (t.shape === 'L') {
 		const k = Math.min(1.5, Math.min(t.w, t.d) / 3);
@@ -1844,7 +1931,7 @@ function addTerrainObj(t) {
 		const R = seeded([...t.id].reduce((s, ch) => s * 31 + ch.charCodeAt(0), 7));
 		for (let i = 0; i < 7; i++) {
 			const r = Math.min(t.w, t.d) * (0.24 + R() * 0.12);
-			const m = new THREE.Mesh(new THREE.CircleGeometry(r, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: c.color, transparent: true, opacity: 0.5, depthWrite: false }));
+			const m = new THREE.Mesh(new THREE.CircleGeometry(r, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: tint, map: tex, transparent: true, opacity: 0.55, depthWrite: false }));
 			m.position.set((R() - 0.5) * Math.max(0, t.w - 2 * r), 0.02 + i * 0.001, (R() - 0.5) * Math.max(0, t.d - 2 * r));
 			parts.push(m);
 		}
