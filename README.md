@@ -14,6 +14,10 @@ No game cards ship with the page. If you have your own card library file (`skirm
 
 With a deployment chosen, a model whose base is within 3″ of a Mission Marker contests it and shows the marker's number on its base. Each marker shows the supply each side has on it (every unit with a model there counts once). A side takes control when it has more supply on a marker than the other side, and the marker then glows in that player's colour. A tie or an empty marker keeps its control, and every marker starts with no one controlling it. Right-click a marker to set control by hand.
 
+## Tokens
+
+Units can carry tokens: right-click a model and choose **Add token…**, or use **+ Token** on the selected model's card. The picker lists the tokens of the unit's faction first (Protoss, Terran, Zerg), then the ones any faction uses (Hidden, Stationary), and has a Buff/Debuff maker (stat and value). Tokens show at 25 mm above the unit's first model on the table. Click a token on the card to take it off, or **Clear** to take them all off; Undo puts them back. The token symbols are drawn for this page.
+
 ## Online play
 
 Under **Online game**, choose **Start online game with this board** and send the other player the link (**Copy link**). They need no account.
