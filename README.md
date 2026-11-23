@@ -26,6 +26,10 @@ No game cards ship with the page. If you have your own card library file (`skirm
 
 Damage is marked on the unit: each point goes to the model already wounded, else the next one from the back of the unit (specialists last), and a model is destroyed when its Health runs out. Click a model in the Reserves to see its card.
 
+## Missions
+
+Under the deployment in Setup, pick a **Mission**: Supply Drop, Hold Position, Frontlines, Gather the Resources, Divide and Conquer, Artefact Hunt or Fire in the Sky, at Standard Engagement or Skirmish Level. The list and the mission text come from the Mission Cards in your own card library (none ship with the page). Point at either player's score at the top: the popover shows the mission's supply, game length, its parts with the scoring ones marked (and whether they score this round), and the lead that ends the game early, above the score by round. The mission is shared in an online game; each player needs the library to read its text.
+
 ## Mission Markers
 
 With a deployment chosen, a model whose base is within 3″ of a Mission Marker contests it and shows the marker's number on its base. Each marker shows the supply each side has on it (every unit with a model there counts once; a Commander, a Supply Depot or a Domineering Presence counts one more). Control is decided when a player presses **End round**: the side with more supply on a marker takes it, and the marker then glows in that player's colour. A tie or an empty marker keeps its control, and every marker starts with no one controlling it. Right-click a marker to set control by hand.

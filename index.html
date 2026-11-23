@@ -108,6 +108,11 @@ body.stage-play .st-setup { display: none !important; }
 .scorepop td.rt:last-child { border-right: 0; }
 .scorepop { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 40; width: min(540px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / .5); display: flex; flex-direction: column; gap: 10px; }
 .scorepop::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
+.scorepop .mission { display: flex; flex-direction: column; gap: 6px; max-height: 42vh; overflow: auto; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.scorepop .mission h3 .note { text-transform: none; letter-spacing: 0; font-family: var(--font-body); font-weight: 400; }
+.mparts { text-align: left; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; line-height: 1.45; }
+.mpart.mscore { border-left: 2px solid var(--tape); padding-left: 8px; }
+.mpart .on { color: var(--hit); }
 .scorepop h3 { margin: 0; font-family: var(--font-display); font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 .scorepop table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .scorepop th, .scorepop td { padding: 2px 4px; text-align: center; font-size: 13px; }
@@ -508,7 +513,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 	<!-- left: setting up the game -->
 	<aside class="panel left" aria-label="Setup and units">
 		<section class="box st-setup">
-				<h2><span class="stepn">1</span>Table &amp; deployment</h2>
+				<h2><span class="stepn">1</span>Table, deployment &amp; mission</h2>
 				<div class="field">
 					<label>Table mat</label>
 					<div class="matpick" id="matPick"></div>
@@ -518,6 +523,11 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 					<select id="deploySel"></select>
 				</div>
 				<p class="note" id="deployNote"></p>
+				<div class="field">
+					<label for="missionSel">Mission</label>
+					<select id="missionSel"></select>
+				</div>
+				<p class="note" id="missionNote"></p>
 				<div class="row" id="sizePresets"></div>
 				<div class="row">
 					<div class="field"><label for="tableW">Width (in)</label><input type="number" id="tableW" min="12" max="120"></div>
@@ -958,7 +968,8 @@ function normalize(s) {
 		// the grid is off unless switched on (boards saved before version 2 had it on by default, so they start off once)
 		table: { w: clampN(s.table?.w, 12, 120, TABLE_W), d: clampN(s.table?.d, 12, 120, TABLE_D), grid: (s.v || 1) >= 2 && s.table?.grid === true,
 			mat: typeof s.table?.mat === 'string' && MATS[s.table.mat] ? s.table.mat : 'plain',
-			deploy: typeof s.table?.deploy === 'string' && DEPLOYMENTS[s.table.deploy] ? s.table.deploy : null, lockTerrain: s.table?.lockTerrain === true },
+			deploy: typeof s.table?.deploy === 'string' && DEPLOYMENTS[s.table.deploy] ? s.table.deploy : null, lockTerrain: s.table?.lockTerrain === true,
+			mission: normMission(s.table?.mission) },
 		players: normPlayers(s.players),
 		score: normScore(s.score),
 		ctl: normCtl(s.ctl),
@@ -1058,6 +1069,8 @@ function normTerrain(t) {
 // Boards saved before the split had one `pts` grid; it is kept as mission scoring.
 const SCORE_CATS = [['sd', 'Supply destroyed'], ['ms', 'Mission scoring']];
 // control of the Mission Markers, by marker number: c who controls it, l who last had more supply on it
+// a mission is kept as "Name · Level", e.g. "Supply Drop · Standard Engagement"
+function normMission(v) { return typeof v === 'string' && /^[\w'’ !&,.\-]{2,60} · [\w ]{2,30}$/.test(v) ? v : null; }
 function normCtl(o) {
 	const side = v => v === 0 || v === 1 ? v : null, r = {};
 	for (const n of ['1', '2', '3', '4', '5']) if (o?.[n]) r[n] = { c: side(o[n].c), l: side(o[n].l) };
@@ -4297,7 +4310,72 @@ $('#deploySel').innerHTML = '<option value="">No deployment</option>'
 	+ [['Standard engagement · 54×36″', 54], ['Skirmish · 36×36″', 36]].map(([label, w]) => `<optgroup label="${label}">${Object.entries(DEPLOYMENTS).filter(([, d]) => d.w === w)
 		.map(([k, d]) => `<option value="${k}">${esc(d.name)}</option>`).join('')}</optgroup>`).join('');
 $('#deploySel').addEventListener('change', e => setDeployment(e.target.value));
+// the Mission Cards in the card library: "Supply Drop - Standard Engagement" with its text
+function libMissions() {
+	const out = new Map();
+	for (const c of LIB?.cards || []) for (const a of c.abilities || []) {
+		if (!/^mission$/i.test(a.type || '')) continue;
+		const m = /^(.+?)\s*[-–]\s*(Standard Engagement|Skirmish Level)\s*$/i.exec(a.name || '');
+		if (!m || !a.text) continue;
+		const key = `${m[1].trim()} · ${m[2].replace(/\b\w/g, x => x.toUpperCase())}`;
+		if (!out.has(key) || a.text.length > out.get(key).text.length) out.set(key, { key, name: m[1].trim(), level: m[2], text: a.text });
+	}
+	return out;
+}
+// a mission's text in parts: start and per-round supply, game length, then its labelled sections
+const MISSION_HEADS = /(MISSION PARAMETERS|SCORING CONDITIONS|ADDITIONAL CONDITIONS|SPECIAL WINNING CONDITIONS|FROM THE START OF THE (?:FIRST|SECOND) ROUND|FROM THE (?:FIRST|SECOND) ROUND|END OF ROUND \d|START OF THE ROUND\s*(?:\([^)]*\)|\d+)|ASSAULT PHASE|SCORING PHASE|GATHER ACTION|CLAIM|Sabotage Action):/g;
+function missionInfo(key) {
+	const ms = libMissions().get(key); if (!ms) return null;
+	const top = /^\s*(\d+)\s*\+(\d+)\s*SUPPLY PER ROUND\.\s*GAME LENGTH:\s*(\d+)\.?\s*/i.exec(ms.text);
+	const body = top ? ms.text.slice(top[0].length) : ms.text, parts = [];
+	let last = null, at = 0, mm;
+	MISSION_HEADS.lastIndex = 0;
+	while ((mm = MISSION_HEADS.exec(body))) {
+		if (last !== null || mm.index > at) parts.push({ head: last, text: body.slice(at, mm.index).trim() });
+		last = mm[1]; at = mm.index + mm[0].length;
+	}
+	parts.push({ head: last, text: body.slice(at).trim() });
+	const lead = /leads by (\d+)\+/i.exec(ms.text);
+	return { ...ms, start: top ? +top[1] : null, perRound: top ? +top[2] : null, length: top ? +top[3] : null, lead: lead ? +lead[1] : null,
+		parts: parts.filter(x => x.text || x.head === 'SCORING CONDITIONS') };
+}
+const sentence = h => h.charAt(0) + h.slice(1).toLowerCase();
+function missionHtml() {
+	const key = state.table.mission; if (!key) return '';
+	const mi = missionInfo(key), sc = state.score;
+	if (!mi) return `<div class="mission"><h3>Mission: ${esc(key)}</h3><p class="note">Load the card library (Setup › Card library) to read how this mission scores.</p></div>`;
+	const t0 = scoreTotal(0), t1 = scoreTotal(1), gap = Math.abs(t0 - t1);
+	const rows = mi.parts.map(x => {
+		const from = /(FIRST|SECOND) ROUND/.exec(x.head || ''), n = from ? (from[1] === 'FIRST' ? 1 : 2) : null, end = /END OF ROUND (\d)/.exec(x.head || '');
+		const when = n ? (sc.round >= n ? ' <span class="on">· scores this round</span>' : ` <span class="note">· from round ${n}</span>`) : end ? (sc.round == end[1] ? ' <span class="on">· this round</span>' : '') : '';
+		return x.text ? `<div class="mpart${x.head === 'SCORING CONDITIONS' || n || end ? ' mscore' : ''}">${x.head ? `<b>${esc(sentence(x.head))}</b>${when} ` : ''}${esc(x.text)}</div>` : '';
+	}).join('');
+	return `<div class="mission">
+		<h3>Mission: ${esc(mi.name)} <span class="note">${esc(mi.level)}${mi.length ? ` · ${mi.length} rounds` : ''}${mi.start != null ? ` · ${mi.start} supply, +${mi.perRound} each round` : ''}</span></h3>
+		<div class="mparts">${rows}</div>
+		${mi.lead ? `<p class="note" style="margin:4px 0 0">Ends at once on a ${mi.lead}+ lead${gap ? ` · the gap is ${gap} now` : ''}${mi.length ? ` · round ${sc.round} of ${mi.length}` : ''}.</p>` : ''}</div>`;
+}
+function renderMissionSel() {
+	const all = [...libMissions().values()], cur = state.table.mission, skirmish = state.table.w <= 40;
+	const levels = skirmish ? ['Skirmish Level', 'Standard Engagement'] : ['Standard Engagement', 'Skirmish Level'];
+	let opts = '<option value="">No mission</option>' + levels.map(l => {
+		const ms = all.filter(m => m.level.toLowerCase() === l.toLowerCase()).sort((a, b) => a.name.localeCompare(b.name));
+		return ms.length ? `<optgroup label="${l}${l === 'Skirmish Level' ? ' · 36×36″' : ' · 54×36″'}">${ms.map(m => `<option value="${esc(m.key)}">${esc(m.name)}</option>`).join('')}</optgroup>` : '';
+	}).join('');
+	if (cur && !all.some(m => m.key === cur)) opts += `<option value="${esc(cur)}">${esc(cur)}</option>`;
+	$('#missionSel').innerHTML = opts;
+	$('#missionSel').value = cur || '';
+	$('#missionSel').disabled = !all.length && !cur;
+	$('#missionNote').textContent = !all.length ? 'The missions come from the Mission Cards in your card library: load it under Card library below.'
+		: cur ? 'Point at either player\'s score at the top to see how this mission scores.' : '';
+}
+$('#missionSel').addEventListener('change', e => {
+	state.table.mission = normMission(e.target.value);
+	renderMissionSel(); save();
+	if (state.table.mission) toast(`Mission: ${esc(state.table.mission)}. Point at a score at the top to see how it scores.`);
+});
 function syncTableInputs() {
+	try { renderMissionSel(); } catch { }   // the card library may not be set up yet while the page starts
 	$('#deploySel').value = state.table.deploy || '';
 	$('#deployNote').textContent = state.table.deploy
 		? 'Coloured areas are each side’s entry edges. Markers 1 and 3 are Red’s, 2 and 4 Blue’s, 5 is neutral; the ring shows the 3″ contest range. Models contesting a marker show its number on their base, and the marker shows each side’s supply on it. A side takes control when it has more supply there, and the marker glows in its colour. Right-click a marker to set control by hand.' : '';
@@ -4859,7 +4937,7 @@ function renderScorePop() {
 	// each player's header cells carry that player's colour
 	const catHead = i => SCORE_CATS.map(([, label]) => `<th class="cat" style="--pc:${p[i].color}">${label}</th>`).join('') + `<th class="cat" style="--pc:${p[i].color}">Round</th>`;
 	const foot = i => SCORE_CATS.map(([c]) => `<td>${catTotal(c, i)}</td>`).join('') + `<td class="rt">${scoreTotal(i)}</td>`;
-	scorePop.innerHTML = `
+	scorePop.innerHTML = `${missionHtml()}
 		<h3>Score by round</h3>
 		<div class="scoretable">
 		<table>
@@ -4993,6 +5071,7 @@ async function initLibrary() {
 }
 function renderLibrary() {
 	const on = !!LIB;
+	renderMissionSel();
 	refreshAllFaces();   // damage numbers on the bases need the cards' Health and Shield
 	renderSupply(); renderReserves();   // and supply follows the cards' models / supply tables
 	$('#libStatus').textContent = on
@@ -5319,7 +5398,7 @@ function pieceDoc(it, kind) {
 		? { kind, name: it.name, player: it.player, baseMm: it.baseMm, img: it.img, x: r3(it.x), z: r3(it.z), unit: it.unit, reserve: it.reserve, dmgH: it.dmgH || 0, dmgS: it.dmgS || 0, tok: it.tok || null, spec: it.spec || null, glow: it.glow || null }
 		: { kind, w: it.w, d: it.d, h: it.h, x: r3(it.x), z: r3(it.z), rot: r3(it.rot), name: it.name, shape: it.shape, cls: it.cls };
 }
-function metaDoc(s) { return { table: { w: s.table.w, d: s.table.d, mat: s.table.mat, deploy: s.table.deploy, lockTerrain: s.table.lockTerrain }, players: s.players.map(p => ({ name: p.name, color: p.color })), score: { round: s.score.round, sd: s.score.sd, ms: s.score.ms, avail: s.score.avail, kills: s.score.kills }, ctl: s.ctl, clock: s.clock }; }
+function metaDoc(s) { return { table: { w: s.table.w, d: s.table.d, mat: s.table.mat, deploy: s.table.deploy, lockTerrain: s.table.lockTerrain, mission: s.table.mission || null }, players: s.players.map(p => ({ name: p.name, color: p.color })), score: { round: s.score.round, sd: s.score.sd, ms: s.score.ms, avail: s.score.avail, kills: s.score.kills }, ctl: s.ctl, clock: s.clock }; }
 function seatName(s) { return s === 0 || s === 1 ? state.players[s].name : 'Spectator'; }
 function newCode() { const a = 'abcdefghjkmnpqrstuvwxyz23456789', b = new Uint8Array(6); crypto.getRandomValues(b); return [...b].map(x => a[x % a.length]).join(''); }
 
@@ -5461,7 +5540,7 @@ function applyRemoteMeta(d) {
 		net.legacyTac = normTactics(d.tactics);
 		if (net.loaded && !net.hasTac && !state.tactics.length) { state.tactics = net.legacyTac; renderTactics(); save(); }
 	}
-	const remote = { table: { w: clampN(d?.table?.w, 12, 120, state.table.w), d: clampN(d?.table?.d, 12, 120, state.table.d), mat: MATS[d?.table?.mat] ? d.table.mat : state.table.mat, deploy: DEPLOYMENTS[d?.table?.deploy] ? d.table.deploy : null, lockTerrain: d?.table?.lockTerrain === true },
+	const remote = { table: { w: clampN(d?.table?.w, 12, 120, state.table.w), d: clampN(d?.table?.d, 12, 120, state.table.d), mat: MATS[d?.table?.mat] ? d.table.mat : state.table.mat, deploy: DEPLOYMENTS[d?.table?.deploy] ? d.table.deploy : null, lockTerrain: d?.table?.lockTerrain === true, mission: normMission(d?.table?.mission) },
 		players: normPlayers(d?.players), score: normScore(d?.score), ctl: normCtl(d?.ctl), clock: normClock(d?.clock) };
 	// a local change not yet sent (a score click, a name being typed) wins: it is written next
 	if (net.metaLoaded && JSON.stringify(metaDoc(state)) !== net.metaSynced) { net.metaSynced = JSON.stringify(remote); save(); return; }
@@ -5474,6 +5553,7 @@ function applyRemoteMeta(d) {
 		if (!net.metaLoaded) fitView();
 	}
 	if (remote.table.lockTerrain !== state.table.lockTerrain) setTerrainLock(remote.table.lockTerrain, true);
+	if (remote.table.mission !== state.table.mission) { state.table.mission = remote.table.mission; renderMissionSel(); if (!scorePop.hidden) renderScorePop(); }
 	if (JSON.stringify(players) !== JSON.stringify(state.players)) {
 		state.players = players;
 		for (const o of objs.values()) if (o.kind === 'mini') refreshFace(o);
