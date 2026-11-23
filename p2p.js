@@ -12,6 +12,11 @@
 	const STORE = 'sktable-store-';                   // a hosted game's documents, kept so the host can reload
 	const MAX_DOC = 600000, MAX_DOCS = 4000, MAX_ROLLS = 40;
 	const CODE_RE = /^[a-z0-9]{4,12}$/;
+	// PeerJS refuses a JSON message of 16 300 bytes or more ("Message too big for JSON channel"), and one model's
+	// picture is about twice that. A piece of 5 000 characters stays under it even when every character is
+	// escaped again or takes three bytes; 5 000 pieces is 25 MB at most.
+	const LIMIT = 15000, CHUNK = 5000, MAX_PARTS = 5000;
+	const utf8 = new TextEncoder();
 
 	const store = new Map();                          // path -> document
 	const listeners = new Set();
@@ -26,6 +31,31 @@
 	const lsDel = k => { try { localStorage.removeItem(k); } catch { } };
 	const hostedCodes = () => { try { const a = JSON.parse(lsGet(HOSTED) || '[]'); return Array.isArray(a) ? a.filter(c => CODE_RE.test(c)) : []; } catch { return []; } };
 	const inGame = path => S && typeof path === 'string' && (path === 'games/' + S.code || path.startsWith('games/' + S.code + '/')) && path.length < 200;
+
+	// ---- messages: big ones are split into pieces and joined again on arrival
+	function send(conn, msg) {
+		if (!conn?.open) return;
+		const j = JSON.stringify(msg);
+		if (j.length <= CHUNK || utf8.encode(j).length <= LIMIT) { conn.send(msg); return; }
+		const id = rid(), n = Math.ceil(j.length / CHUNK);
+		for (let i = 0; i < n; i++) conn.send({ t: 'part', id, i, n, s: j.slice(i * CHUNK, (i + 1) * CHUNK) });
+	}
+	const parts = new WeakMap();                      // connection -> message id -> pieces
+	function unpack(conn, m) {
+		if (!m || typeof m !== 'object') return null;
+		if (m.t !== 'part') return m;
+		const n = m.n | 0, i = m.i | 0;
+		if (typeof m.id !== 'string' || typeof m.s !== 'string' || n < 1 || n > MAX_PARTS || i < 0 || i >= n) return null;
+		let byId = parts.get(conn);
+		if (!byId) parts.set(conn, byId = new Map());
+		let p = byId.get(m.id);
+		if (!p) { if (byId.size > 8) byId.delete(byId.keys().next().value); byId.set(m.id, p = { n, got: 0, s: new Array(n) }); }
+		if (p.n !== n || p.s[i] !== undefined) return null;
+		p.s[i] = m.s; p.got++;
+		if (p.got < n) return null;
+		byId.delete(m.id);
+		try { return JSON.parse(p.s.join('')); } catch { return null; }
+	}
 
 	// ---- listeners: each keeps what it last delivered and is told only about what changed
 	function snapDoc(L, own) {
@@ -79,7 +109,7 @@
 			if (data === null) store.delete(path); else store.set(path, data);
 			S.pend.set(path, (S.pend.get(path) || 0) + 1);
 			const op = { t: 'op', path, data };
-			if (S.conn?.open) S.conn.send(op); else S.outbox.push(op);
+			if (S.conn?.open) send(S.conn, op); else S.outbox.push(op);
 		}
 		notify(new Set([path]));
 		return Promise.resolve();
@@ -94,7 +124,7 @@
 	// ---- presence: who is here (seat, live moves, pings)
 	function peerList() { return [...S.pres].map(([id, presence]) => ({ id, sameTab: id === S.me, presence: clone(presence || {}) })); }
 	function firePeers() { if (!S) return; const peers = peerList(); for (const cb of [...S.peerCbs]) { try { cb({ peers }); } catch (e) { console.error(e); } } }
-	function broadcast(msg) { if (!S?.host) return; for (const c of S.conns.values()) if (c.open) c.send(msg); }
+	function broadcast(msg) { if (!S?.host) return; for (const c of S.conns.values()) send(c, msg); }
 	function sharePeers() { broadcast({ t: 'peers', list: [...S.pres] }); firePeers(); }
 
 	// ---- host
@@ -108,11 +138,12 @@
 				if (S !== s) return;
 				s.conns.set(conn.peer, conn);
 				s.pres.set(conn.peer, {});
-				conn.send({ t: 'init', docs: [...store], peers: [...s.pres] });
+				send(conn, { t: 'init', docs: [...store], peers: [...s.pres] });
 				sharePeers();
 			});
-			conn.on('data', m => {
-				if (S !== s || !m || typeof m !== 'object') return;
+			conn.on('data', raw => {
+				const m = S === s && unpack(conn, raw);
+				if (!m) return;
 				if (m.t === 'op' && inGame(m.path) && (m.data === null || (typeof m.data === 'object' && JSON.stringify(m.data).length <= MAX_DOC))) {
 					try { hostApply(m.path, m.data === null ? null : clone(m.data)); } catch { return; }
 					broadcast({ t: 'op', path: m.path, data: m.data, from: conn.peer });
@@ -155,14 +186,15 @@
 		conn.on('open', () => {
 			if (S !== s) { conn.close(); return; }
 			s.conn = conn;
-			conn.send({ t: 'pres', p: s.myPres });
+			send(conn, { t: 'pres', p: s.myPres });
 		});
-		conn.on('data', m => {
-			if (S !== s || !m || typeof m !== 'object') return;
+		conn.on('data', raw => {
+			const m = S === s && unpack(conn, raw);
+			if (!m) return;
 			if (m.t === 'init' && Array.isArray(m.docs)) {
 				store.clear();
 				for (const [p, d] of m.docs) if (inGame(p)) store.set(p, d);
-				for (const op of s.outbox) { if (op.data === null) store.delete(op.path); else store.set(op.path, op.data); conn.send(op); }
+				for (const op of s.outbox) { if (op.data === null) store.delete(op.path); else store.set(op.path, op.data); send(conn, op); }
 				s.outbox = [];
 				if (Array.isArray(m.peers)) s.pres = new Map(m.peers);
 				s.pres.set(s.me, s.myPres);
@@ -257,7 +289,7 @@
 					if (S !== s || !patch || typeof patch !== 'object') return;
 					Object.assign(s.myPres, clone(patch));
 					if (s.host) sharePeers();
-					else { if (s.conn?.open) s.conn.send({ t: 'pres', p: s.myPres }); firePeers(); }
+					else { send(s.conn, { t: 'pres', p: s.myPres }); firePeers(); }
 				},
 				onPeers: (cb) => { s.peerCbs.add(cb); setTimeout(() => S === s && s.peerCbs.has(cb) && cb({ peers: peerList() }), 0); return () => s.peerCbs.delete(cb); },
 				leave: async () => { }
