@@ -656,6 +656,10 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 				<button type="button" data-k="charge" aria-pressed="false">Charge</button>
 				<button type="button" data-k="plain" aria-pressed="false">Other</button>
 			</div>
+			<div class="row" id="weaponRow" hidden>
+				<span class="note">Weapon</span>
+				<select id="diceWeapon" aria-label="Weapon of the selected unit" style="flex:1;min-width:0"></select>
+			</div>
 			<div class="row" id="poolRow">
 				<div class="stepper">
 					<button id="diceMinus" aria-label="One die fewer">−</button>
@@ -691,6 +695,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 				<div class="seg" role="group" aria-label="Surge die" id="surgePick">
 					<button type="button" data-s="" aria-pressed="true">None</button>
 					<button type="button" data-s="D3" aria-pressed="false">D3</button>
+					<button type="button" data-s="D3+1" aria-pressed="false">D3+1</button>
 					<button type="button" data-s="D6" aria-pressed="false">D6</button>
 				</div>
 				<label class="row" style="gap:6px" id="surgeMatchWrap"><input type="checkbox" id="surgeMatch" checked> target has the surge tag</label>
@@ -2771,6 +2776,7 @@ function bindUnitRow(m) {
 	$('#cardOpen')?.addEventListener('click', () => openCard(findUnit(m.unit)?.card));
 }
 function renderCard() {
+	queueMicrotask(() => { try { renderWeapons(); } catch { } });
 	if (!sel) { cardEl.innerHTML = '<p class="note">Click a model or a terrain piece to see it here. Shift+click or Shift+drag selects several models.</p>'; return; }
 	if (multi.size > 1) {
 		const ms = selectedMinis(), unitIds = new Set(ms.map(m => m.unit)), mixed = new Set(ms.map(m => m.player)).size > 1;
@@ -3913,7 +3919,7 @@ const diceTarget = () => +$('#diceTarget').value;
 const diceSpeed = () => clampN($('#diceSpeed').value, 0, 20, 4) | 0;
 const rollerSeat = () => net.code ? net.seat : dice.roller;
 const plural = (n, w) => `${n} ${n === 1 ? w : /(^| )die$/.test(w) ? w.replace(/die$/, 'dice') : w.endsWith('s') ? w + 'es' : w + 's'}`;
-const surgeValue = s => !s ? 0 : s.type === 'D3' ? Math.ceil(s.v / 2) : s.v;
+const surgeValue = s => !s ? 0 : s.type === 'D3' ? Math.ceil(s.v / 2) : s.type === 'D3+1' ? Math.ceil(s.v / 2) + 1 : s.v;
 
 function newRoll() {
 	const kind = dice.kind;
@@ -3950,7 +3956,7 @@ function commitRoll(part) {
 function showRoll(rec, fresh) { dice.cur = rec; dice.lastId = rec.id; dice.fresh = fresh; }
 function normRoll(id, b) {
 	if (!b || !Array.isArray(b.dice) || !b.dice.length || b.dice.length > 60) return null;
-	const s = b.surge && (b.surge.type === 'D3' || b.surge.type === 'D6') ? { type: b.surge.type, v: clampN(b.surge.v, 1, 6, 1) | 0 } : null;
+	const s = b.surge && (b.surge.type === 'D3' || b.surge.type === 'D3+1' || b.surge.type === 'D6') ? { type: b.surge.type, v: clampN(b.surge.v, 1, 6, 1) | 0 } : null;
 	return { id, ts: Number(b.ts) || 0, seat: b.seat === 0 || b.seat === 1 ? b.seat : 2, name: String(b.name || 'Someone').slice(0, 24),
 		kind: KINDS.includes(b.kind) ? b.kind : 'plain', label: String(b.label || 'Roll').slice(0, 30),
 		dice: b.dice.map(d => ({ v: clampN(d?.v, 1, 6, 1) | 0, re: !!d?.re })), target: clampN(b.target, 0, 6, 0) | 0,
@@ -3998,6 +4004,7 @@ function renderDiceControls() {
 	$('#poolRow').hidden = k === 'charge';
 	$('#speedRow').hidden = k !== 'charge';
 	$('#surgeRow').hidden = k !== 'hit';
+	if (k !== 'hit') $('#weaponRow').hidden = true;
 	$('#surgeMatchWrap').hidden = !dice.surge;
 	$('#surgePick').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.s === dice.surge));
 	$('#targetLabel').textContent = TARGET_LABEL[k] || '';
@@ -4010,6 +4017,7 @@ function selectedCard() { const m = sel?.kind === 'mini' ? findMini(sel.id) : nu
 function setKind(k, fromCard = true) {
 	dice.kind = k;
 	if (k !== 'armour') dice.carry = 0;
+	if (k === 'hit') renderWeapons(true);
 	const sc = fromCard ? selectedCard() : null;
 	if (sc?.c) {
 		const num = v => { const x = /(\d)\+?/.exec(String(v ?? '')); return x ? +x[1] : null; };
@@ -4023,6 +4031,41 @@ function setKind(k, fromCard = true) {
 	}
 	renderDiceControls();
 }
+// Hit rolls: pick one of the selected unit's weapons and its dice fill in - RoA x the models still alive, its Hit value
+// and its surge die. A different unit, or a model lost, fills them in again; changing the numbers by hand is kept until then.
+let weaponSig = '';
+function unitWeapons() {
+	const sc = selectedCard();
+	if (!sc?.c || !Array.isArray(sc.c.weapons)) return null;
+	const u = findUnit(sc.m.unit);
+	return u ? { u, c: sc.c, ws: sc.c.weapons.filter(w => w && w.name) } : null;
+}
+function renderWeapons(force) {
+	const uw = unitWeapons();
+	$('#weaponRow').hidden = dice.kind !== 'hit' || !uw?.ws.length;
+	if (!uw?.ws.length) { weaponSig = ''; return; }
+	if (dice.kind !== 'hit') return;
+	const alive = aliveModels(uw.u).length || 1, sig = uw.u.id + '|' + uw.c.id + '|' + alive;
+	if (sig === weaponSig && !force) return;
+	const keep = weaponSig.split('|')[0] === uw.u.id ? $('#diceWeapon').value : null;
+	weaponSig = sig;
+	const has = v => v && v !== '-';
+	$('#diceWeapon').innerHTML = uw.ws.map((w, i) => `<option value="${i}">${esc(w.name)} · ${esc(w.phase || '')} · RoA ${esc(w.roa)} × ${alive} · ${esc(w.hit)}`
+		+ `${has(w.surgeDice) ? ' · surge ' + esc(w.surgeDice) : ''}${w.upgrade ? ' (upgrade)' : ''}</option>`).join('') + '<option value="">By hand</option>';
+	$('#diceWeapon').value = keep !== null && $('#diceWeapon').querySelector(`option[value="${keep}"]`) ? keep : '0';
+	applyWeapon();
+}
+function applyWeapon() {
+	const uw = unitWeapons(), w = uw?.ws[+$('#diceWeapon').value];
+	if (!w || $('#diceWeapon').value === '') return;
+	const roa = /^\d+$/.test(String(w.roa).trim()) ? +w.roa : null, hit = /(\d)\+?/.exec(String(w.hit || ''));
+	if (roa) $('#diceCount').value = Math.min(60, roa * (aliveModels(uw.u).length || 1));
+	if (hit) $('#diceTarget').value = String(Math.min(6, Math.max(2, +hit[1])));
+	const sd = String(w.surgeDice || '').trim();
+	dice.surge = ['D3', 'D3+1', 'D6'].includes(sd) && w.surgeType && w.surgeType !== '-' ? sd : '';
+	renderDiceControls();
+}
+$('#diceWeapon').addEventListener('change', applyWeapon);
 $('#kindPick').addEventListener('click', e => { const b = e.target.closest('button[data-k]'); if (b) setKind(b.dataset.k); });
 $('#surgePick').addEventListener('click', e => { const b = e.target.closest('button[data-s]'); if (!b) return; dice.surge = b.dataset.s; renderDiceControls(); });
 $('#surgeMatch').addEventListener('change', e => { dice.surgeMatch = e.target.checked; });
@@ -4039,7 +4082,7 @@ function renderDice() {
 	const r = dice.cur, list = r?.dice || [];
 	const t = r ? r.target : 0;
 	const shown = $('#diceSort').checked ? [...list].sort((a, b) => b.v - a.v) : list;
-	const surgeDie = r?.surge ? `<span class="die surge ${dice.fresh ? 'tumble' : ''}" title="Surge die ${r.surge.v}${r.surge.type === 'D3' ? ' = D3 ' + surgeValue(r.surge) : ''}">${dieSvg(r.surge.v)}</span>` : '';
+	const surgeDie = r?.surge ? `<span class="die surge ${dice.fresh ? 'tumble' : ''}" title="Surge die ${r.surge.v}${r.surge.type !== 'D6' ? ' = ' + r.surge.type + ' ' + surgeValue(r.surge) : ''}">${dieSvg(r.surge.v)}</span>` : '';
 	$('#diceField').innerHTML = list.length
 		? shown.map((d, i) => `<span class="die ${t ? (d.v >= t ? 'hit' : 'miss') : ''} ${d.re ? 're' : ''} ${dice.fresh ? 'tumble' : ''}" style="animation-delay:${Math.min(i, 30) * 12}ms" title="${d.v}${d.re ? ' (rerolled)' : ''}">${dieSvg(d.v)}</span>`).join('') + surgeDie
 		: '<span class="empty">Press Roll, or hit Enter in the dice count.</span>';
