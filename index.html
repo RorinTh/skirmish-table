@@ -4910,12 +4910,13 @@ const gameRef = () => net.db.doc('games/' + net.code);
 const piecesCol = () => net.db.collection('games/' + net.code + '/pieces');
 const rollsCol = () => net.db.collection('games/' + net.code + '/rolls');
 function pieceDoc(it, kind) {
+	if (kind === 'tac') return { kind, player: it.player, name: it.name, card: it.card, res: it.res, value: it.value, used: it.used };
 	if (kind === 'unit') return { kind, name: it.name, player: it.player, supply: it.supply, card: it.card, upgrades: it.upgrades, coh: it.coh, glow: it.glow ?? null, hp: it.hp ?? null, sh: it.sh ?? null, tokens: it.tokens || [] };
 	return kind === 'mini'
 		? { kind, name: it.name, player: it.player, baseMm: it.baseMm, img: it.img, x: r3(it.x), z: r3(it.z), unit: it.unit, reserve: it.reserve, dmgH: it.dmgH || 0, dmgS: it.dmgS || 0, tok: it.tok || null }
 		: { kind, w: it.w, d: it.d, h: it.h, x: r3(it.x), z: r3(it.z), rot: r3(it.rot), name: it.name, shape: it.shape, cls: it.cls };
 }
-function metaDoc(s) { return { table: { w: s.table.w, d: s.table.d, mat: s.table.mat, deploy: s.table.deploy, lockTerrain: s.table.lockTerrain }, tactics: s.tactics, players: s.players.map(p => ({ name: p.name, color: p.color })), score: { round: s.score.round, sd: s.score.sd, ms: s.score.ms, avail: s.score.avail, kills: s.score.kills }, ctl: s.ctl, clock: s.clock }; }
+function metaDoc(s) { return { table: { w: s.table.w, d: s.table.d, mat: s.table.mat, deploy: s.table.deploy, lockTerrain: s.table.lockTerrain }, players: s.players.map(p => ({ name: p.name, color: p.color })), score: { round: s.score.round, sd: s.score.sd, ms: s.score.ms, avail: s.score.avail, kills: s.score.kills }, ctl: s.ctl, clock: s.clock }; }
 function seatName(s) { return s === 0 || s === 1 ? state.players[s].name : 'Spectator'; }
 function newCode() { const a = 'abcdefghjkmnpqrstuvwxyz23456789', b = new Uint8Array(6); crypto.getRandomValues(b); return [...b].map(x => a[x % a.length]).join(''); }
 
@@ -4931,6 +4932,7 @@ async function syncNet() {
 			for (const m of s.minis) want.set(m.id, JSON.stringify(pieceDoc(m, 'mini')));
 			for (const u of s.units) want.set(u.id, JSON.stringify(pieceDoc(u, 'unit')));
 			for (const t of s.terrain) want.set(t.id, JSON.stringify(pieceDoc(t, 'terrain')));
+			for (const t of s.tactics) want.set(t.id, JSON.stringify(pieceDoc(t, 'tac')));
 			for (const [id, j] of want) if (net.synced.get(id) !== j && ID_RE.test(id)) { net.synced.set(id, j); ops.push(piecesCol().doc(id).set(JSON.parse(j))); }
 			for (const id of [...net.synced.keys()]) if (!want.has(id)) { net.synced.delete(id); ops.push(piecesCol().doc(id).delete()); }
 			const mj = JSON.stringify(metaDoc(s));
@@ -4956,10 +4958,10 @@ async function joinGame(code, create) {
 	if (!net.db) return;
 	if (!CODE_RE.test(code)) { toast('A game code is 4 to 12 letters and digits.'); return; }
 	leaveGame(true);
-	Object.assign(net, { code, loaded: false, metaLoaded: false, rollsLoaded: false, readOnly: false, synced: new Map(), metaSynced: '', peers: [], rd: new Map(), status: 'Connecting…' });
+	Object.assign(net, { code, loaded: false, metaLoaded: false, rollsLoaded: false, readOnly: false, synced: new Map(), metaSynced: '', legacyTac: null, hasTac: false, peers: [], rd: new Map(), status: 'Connecting…' });
 	window.p2p?.begin(code, create);
 	net.seat = readSeat(code, create || window.p2p?.isHost() ? 0 : 1);
-	if (net.seat < 2) { addPlayer = net.seat; renderAddPlayer(); }
+	if (net.seat < 2) { addPlayer = net.seat; renderAddPlayer(); listPlayer = net.seat; renderListPlayer(); }
 	dice.history = []; dice.cur = null; dice.lastId = null; renderDice(); renderRoller();
 	try { if (location.hash !== '#' + code) location.hash = code; } catch { }
 	renderOnline();
@@ -4970,7 +4972,7 @@ async function joinGame(code, create) {
 			const meta = metaDoc(s);
 			net.metaSynced = JSON.stringify(meta);
 			await gameRef().set({ ...meta, createdAt: net.createdAt });
-			const items = [...s.units.map(u => [u, 'unit']), ...s.minis.map(m => [m, 'mini']), ...s.terrain.map(t => [t, 'terrain'])];
+			const items = [...s.units.map(u => [u, 'unit']), ...s.minis.map(m => [m, 'mini']), ...s.terrain.map(t => [t, 'terrain']), ...s.tactics.map(t => [t, 'tac'])];
 			await Promise.all(items.map(([it, k]) => { const d = pieceDoc(it, k); net.synced.set(it.id, JSON.stringify(d)); return piecesCol().doc(it.id).set(d); }));
 		} catch (e) { handleWriteError(e); }
 		if (net.code !== code) return;
@@ -5032,30 +5034,38 @@ function leaveGame(quiet) {
 	renderOnline();
 }
 function loadRemoteBoard(docs) {
-	const minis = [], terrain = [], units = [];
+	const minis = [], terrain = [], units = [], tactics = [];
 	for (const d of docs) {
 		const b = d.data();
 		if (!ID_RE.test(d.id)) continue;
-		if (b?.kind === 'terrain') terrain.push({ ...b, id: d.id });
+		if (b?.kind === 'tac') tactics.push({ ...b, id: d.id });
+		else if (b?.kind === 'terrain') terrain.push({ ...b, id: d.id });
 		else if (b?.kind === 'mini') minis.push({ ...b, id: d.id });
 		else if (b?.kind === 'unit') units.push({ ...b, id: d.id });
 	}
-	applyState({ ...state, units, minis, terrain, example: false });
+	net.hasTac = tactics.length > 0;
+	applyState({ ...state, units, minis, terrain, tactics: net.hasTac ? tactics : net.legacyTac || [], example: false });
 	net.synced = new Map();
+	if (net.hasTac) for (const t of state.tactics) net.synced.set(t.id, JSON.stringify(pieceDoc(t, 'tac')));
+	else if (state.tactics.length) save();   // an older game's cards: written as pieces now
 	for (const u of state.units) net.synced.set(u.id, JSON.stringify(pieceDoc(u, 'unit')));
 	for (const m of state.minis) net.synced.set(m.id, JSON.stringify(pieceDoc(m, 'mini')));
 	for (const t of state.terrain) net.synced.set(t.id, JSON.stringify(pieceDoc(t, 'terrain')));
 }
 function applyRemoteMeta(d) {
+	// a game made before the cards were pieces: its cards come from the game record, once, and are then written as pieces
+	if (!net.metaLoaded && Array.isArray(d?.tactics) && d.tactics.length) {
+		net.legacyTac = normTactics(d.tactics);
+		if (net.loaded && !net.hasTac && !state.tactics.length) { state.tactics = net.legacyTac; renderTactics(); save(); }
+	}
 	const remote = { table: { w: clampN(d?.table?.w, 12, 120, state.table.w), d: clampN(d?.table?.d, 12, 120, state.table.d), mat: MATS[d?.table?.mat] ? d.table.mat : state.table.mat, deploy: DEPLOYMENTS[d?.table?.deploy] ? d.table.deploy : null, lockTerrain: d?.table?.lockTerrain === true },
-		tactics: normTactics(d?.tactics), players: normPlayers(d?.players), score: normScore(d?.score), ctl: normCtl(d?.ctl), clock: normClock(d?.clock) };
+		players: normPlayers(d?.players), score: normScore(d?.score), ctl: normCtl(d?.ctl), clock: normClock(d?.clock) };
 	// a local change not yet sent (a score click, a name being typed) wins: it is written next
 	if (net.metaLoaded && JSON.stringify(metaDoc(state)) !== net.metaSynced) { net.metaSynced = JSON.stringify(remote); save(); return; }
 	const w = remote.table.w, dd = remote.table.d, players = remote.players;
 	if (JSON.stringify(remote.score) !== JSON.stringify(state.score)) { state.score = remote.score; renderScore(); }
 	if (JSON.stringify(remote.ctl) !== JSON.stringify(state.ctl)) { state.ctl = remote.ctl; objSig = ''; }
 	if (JSON.stringify(remote.clock) !== JSON.stringify(state.clock)) { state.clock = remote.clock; renderClock(); }
-	if (JSON.stringify(remote.tactics) !== JSON.stringify(state.tactics)) { state.tactics = remote.tactics; renderTactics(); }
 	if (w !== state.table.w || dd !== state.table.d || remote.table.mat !== state.table.mat || remote.table.deploy !== state.table.deploy) {
 		Object.assign(state.table, { w, d: dd, mat: remote.table.mat, deploy: remote.table.deploy }); buildTable(); syncTableInputs(); renderMatPick();
 		if (!net.metaLoaded) fitView();
@@ -5075,6 +5085,7 @@ function applyRemoteMeta(d) {
 }
 function applyRemotePiece(id, b) {
 	if (!b || !ID_RE.test(id)) return;
+	if (b.kind === 'tac') { applyRemoteTac(id, b); return; }
 	const kind = ['terrain', 'mini', 'unit'].includes(b.kind) ? b.kind : null;
 	if (!kind) return;
 	const item = kind === 'mini' ? normMini({ ...b, id }) : kind === 'unit' ? normUnit({ ...b, id }) : normTerrain({ ...b, id });
@@ -5110,6 +5121,17 @@ function applyRemotePiece(id, b) {
 		else { objs.get(id)?.g.position.set(ex.x, 0, ex.z); if (face) refreshFace(objs.get(id)); }
 	} else { state.minis.push(item); addMiniObj(item); }
 }
+function applyRemoteTac(id, b) {
+	const item = normTactics([{ ...b, id }])[0];
+	if (!item) return;
+	net.hasTac = true;
+	const remoteJson = JSON.stringify(pieceDoc(item, 'tac')), ex = state.tactics.find(t => t.id === id);
+	// a change to this card made here and not yet sent wins: it is written next
+	if (ex && JSON.stringify(pieceDoc(ex, 'tac')) !== net.synced.get(id)) { net.synced.set(id, remoteJson); save(); return; }
+	net.synced.set(id, remoteJson);
+	if (ex) Object.assign(ex, item); else state.tactics.push(item);
+	renderTactics();
+}
 // the other player moved a model that has a move waiting here: that whole move goes back to where it started
 function yieldMove(id) {
 	const lead = moves.get(id)?.follow || id, mv = moves.get(lead);
@@ -5130,6 +5152,7 @@ function removeRemotePiece(id) {
 	state.minis = state.minis.filter(m => m.id !== id);
 	state.terrain = state.terrain.filter(t => t.id !== id);
 	state.units = state.units.filter(u => u.id !== id);
+	if (state.tactics.some(t => t.id === id)) { state.tactics = state.tactics.filter(t => t.id !== id); renderTactics(); }
 	removeObj(id);
 	if (multi.has(id)) { multi.delete(id); if (sel?.id === id) sel = multi.size ? { kind: 'mini', id: [...multi][0] } : null; refreshSelection(); }
 	else if (sel?.id === id) select(null);
