@@ -45,11 +45,44 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .panel.left { grid-area: left; }
 .panel.right { grid-area: right; }
 .board { grid-area: board; }
-.top { grid-area: top; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.top { grid-area: top; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.top .scoreboard { justify-self: center; }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 
 /* scoreboard: two totals either side of the round, details in a popover */
-.scoreboard { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 18px; }
+.scoreboard { position: relative; display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 10px; }
+.pblock { --pc: var(--muted); display: flex; align-items: stretch; gap: 4px; padding: 3px; border-radius: 10px; background: color-mix(in srgb, var(--pc) 12%, transparent); border: 1px solid color-mix(in srgb, var(--pc) 45%, var(--line)); }
+.midblock { display: flex; align-items: stretch; gap: 4px; }
+.brand h1 { white-space: nowrap; }
+.brand { flex-wrap: wrap; row-gap: 6px; max-width: 340px; }
+.top .scoreboard { flex-wrap: nowrap; }
+@media (max-width: 1240px) { .top .scoreboard { flex-wrap: wrap; } }
+.bctl { flex-basis: 100%; display: flex; gap: 6px; align-items: center; }
+.pblock .score { min-width: 72px; padding-inline: 8px; }
+.pblock .cside { min-width: 78px; }
+.pblock .supply { min-width: 52px; }
+.stagepick button { font-family: var(--font-display); letter-spacing: .05em; text-transform: uppercase; font-size: 12px; }
+.hbtn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: 12.5px; white-space: nowrap; }
+.hbtn:hover { background: var(--raised); }
+.hbtn.on { border-color: var(--hit); color: var(--hit); }
+.qbtn { width: 30px; padding: 5px 0; font-weight: 700; }
+.stepn { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 8px; border-radius: 50%; background: var(--tape); color: var(--tape-ink); font-size: 12px; vertical-align: 1px; }
+.box h3 { margin: 4px 0 0; font-family: var(--font-display); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.customunit > summary { padding: 4px 0; }
+.addform { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+body.stage-play .st-setup { display: none !important; }
+.dlg-back { position: fixed; inset: 0; z-index: 55; background: rgb(0 0 0 / .5); display: grid; place-items: center; padding: 16px; }
+.dlg { width: min(420px, 100%); max-height: 100%; overflow: auto; box-shadow: 0 20px 60px rgb(0 0 0 / .5); }
+.sidetog { position: absolute; top: 50%; z-index: 7; transform: translateY(-50%); width: 18px; height: 54px; padding: 0; border: 1px solid var(--line); background: var(--panel); color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; }
+.sidetog:hover { color: var(--fg); background: var(--raised); }
+.sidetog.l { left: 0; border-left: 0; border-radius: 0 7px 7px 0; }
+.sidetog.r { right: 0; border-right: 0; border-radius: 7px 0 0 7px; }
+.app.hide-left { grid-template-columns: 0 minmax(0, 1fr) 340px; }
+.app.hide-right { grid-template-columns: 310px minmax(0, 1fr) 0; }
+.app.hide-left.hide-right { grid-template-columns: 0 minmax(0, 1fr) 0; }
+.app.hide-left .panel.left, .app.hide-right .panel.right { display: none; }
+.tacov.empty .ulist { display: none; }
+.reserve.empty { opacity: .8; }
 .sgroup { position: relative; display: flex; align-items: stretch; gap: 6px; }
 .supply.over { border-color: var(--danger); }
 .supply.over .digits { color: var(--danger); }
@@ -98,8 +131,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cmid { display: flex; flex-direction: column; justify-content: center; gap: 2px; background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
 .cmid button { border: 0; background: transparent; color: var(--muted); width: 28px; height: 22px; border-radius: 5px; cursor: pointer; font-size: 13px; }
 .cmid button:hover, .cmid button[aria-expanded="true"] { background: var(--panel); color: var(--fg); }
-.clockpop { right: 0; left: auto; transform: none; width: 260px; }
+.clockpop { width: 260px; }
 .clockpop[hidden] { display: none; }
+.ctxglow { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 10px 6px; }
+.ctxglow span { flex: 1 1 100%; color: var(--muted); font-size: 11.5px; }
+.ctxglow button { width: 18px; height: 18px; min-width: 0; padding: 0 !important; border-radius: 50%; border: 1px solid var(--line) !important; background: var(--gc, var(--raised)) !important; font-size: 10px; line-height: 1; }
+.ctxglow button[aria-pressed="true"] { outline: 2px solid var(--fg); outline-offset: 1px; }
 .ctxmenu { position: fixed; z-index: 60; min-width: 190px; background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.45); display: flex; flex-direction: column; }
 .ctxmenu[hidden] { display: none; }
 .tokbox { flex: 1 1 100%; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 6px 0 2px; }
@@ -150,6 +187,21 @@ a.rulesite { color: var(--fg); text-decoration: none; display: inline-block; }
 .tag.leg { background: transparent; color: var(--fg); font-size: 11px; padding: 0 3px; text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 5px var(--bg); }
 .tag.ring { background: transparent; color: var(--tape); font-size: 11px; padding: 0 3px; text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg); }
 
+.atkpanel { position: absolute; top: 52px; left: 50%; transform: translateX(-50%); z-index: 8; width: min(640px, calc(100% - 20px)); max-height: 46%; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgb(0 0 0 / .45); font-size: 12.5px; }
+.atkpanel .ahead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.atkpanel .ahead b { font-family: var(--font-display); letter-spacing: .04em; }
+.atkpanel .def { color: var(--muted); }
+.atkpanel table { width: 100%; border-collapse: collapse; }
+.atkpanel th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11px; padding: 4px 6px; white-space: nowrap; }
+.atkpanel td { padding: 4px 6px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.atkpanel tr.w { cursor: pointer; }
+.atkpanel tr.w:hover td { background: var(--raised); }
+.atkpanel tr.w[aria-selected="true"] td { background: var(--hit-bg); }
+.atkpanel tr.out td { opacity: .45; }
+.atkpanel td.kw { color: var(--muted); font-size: 11.5px; }
+.atkpanel .why { color: var(--danger); font-size: 11px; }
+.endround { align-self: center; border: 1px solid var(--tape); color: var(--tape); background: transparent; border-radius: 8px; padding: 6px 10px; font: 600 12px var(--font-display); letter-spacing: .05em; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
+.endround:hover { background: var(--tape); color: var(--tape-ink); }
 .toolbar { position: absolute; top: 10px; left: 10px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 20px); }
 .seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px; }
 .seg button { border: 0; background: transparent; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; gap: 6px; align-items: center; }
@@ -249,7 +301,7 @@ kbd { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); bor
 .confirm .ok { background: var(--hit); }
 .confirm .no { background: var(--danger); }
 .confirm button:hover { filter: brightness(1.12); transform: scale(1.06); }
-.toast { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 7px 12px; border-radius: 8px; font-size: 13px; pointer-events: none; }
+.toast { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 20; max-width: min(560px, calc(100% - 40px)); text-align: center; background: var(--raised); border: 1px solid var(--line); padding: 7px 12px; border-radius: 8px; font-size: 13px; pointer-events: none; box-shadow: 0 6px 20px rgb(0 0 0 / .45); }
 .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 12.5px; white-space: nowrap; }
 .tip b { font-weight: 600; }
 .tip span { color: var(--muted); }
@@ -376,6 +428,9 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 /* narrower screens: board and play panel side by side, setup underneath */
 @media (max-width: 1240px) {
 	html, body { height: auto; }
+	.sidetog { display: none; }
+	.app.hide-left, .app.hide-right { grid-template-columns: minmax(0, 1fr) 320px; }
+	.app.hide-left .panel.left, .app.hide-right .panel.right { display: flex; }
 	.app { height: auto; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto 80svh auto; grid-template-areas: "top top" "board right" "left left"; }
 	.panel.right { max-height: 80svh; }
 	.panel.left { overflow: visible; }
@@ -389,7 +444,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 	.score { min-width: 64px; padding-inline: 6px; }
 	.supply { min-width: 48px; padding-inline: 4px; }
 	.scoreboard { gap: 8px; }
-	.clock { justify-self: center; }
+	.pblock, .midblock { flex-wrap: wrap; justify-content: center; }
 	.cside { min-width: 72px; }
 	.sgroup { gap: 4px; }
 	.panel { overflow: visible; }
@@ -400,44 +455,46 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 	<header class="top">
 		<div class="brand">
 			<span class="mark" aria-hidden="true"></span>
-			<div>
-				<h1>Skirmish Table</h1>
-				<p>Top-down miniatures board · 1 grid square = 1 inch · bases drawn to scale</p>
+			<h1>Skirmish Table</h1>
+			<div class="bctl">
+			<div class="seg stagepick" role="group" aria-label="Stage of the game">
+				<button id="stageSetup" aria-pressed="true" title="Set up the table, the armies and the terrain">Setup</button>
+				<button id="stagePlay" aria-pressed="false" title="Play: the units on the table, cards and rules on the left">Play</button>
+			</div>
+			<button class="hbtn" id="onlineBtn" aria-haspopup="dialog" aria-controls="onlineDlg">Play online</button>
+			<button class="hbtn qbtn" id="helpBtn" aria-label="Help: controls and shortcuts" title="Help: controls and shortcuts">?</button>
 			</div>
 		</div>
 		<div class="scoreboard" id="scoreboard">
-			<!-- supply: each player's supply on the table either side of the supply available -->
-			<div class="sgroup" role="group" aria-label="Supply">
-				<div class="supply" id="supply0" role="img"><span class="sname">Supply</span><span class="digits">00</span></div>
-				<div class="round counter">
-					<button id="availMinus" aria-label="Less available supply">−</button>
-					<div><span class="rl">Available</span><span class="digits" id="availNum">00</span></div>
-					<button id="availPlus" aria-label="More available supply">+</button>
-				</div>
-				<div class="supply" id="supply1" role="img"><span class="sname">Supply</span><span class="digits">00</span></div>
-			</div>
-			<!-- score: totals either side of the round -->
-			<div class="sgroup scoregroup" role="group" aria-label="Score">
+			<!-- each player's block: score, supply on the table, chess clock -->
+			<div class="pblock" id="pblock0" role="group" aria-label="Player 1">
 				<button class="score" id="score0" aria-expanded="false" aria-controls="scorePop"><span class="sname"></span><span class="digits">00</span></button>
+				<div class="supply" id="supply0" role="img"><span class="sname">Supply</span><span class="digits">00</span></div>
+				<button class="cside" id="clock0" title="Tap to end this player's turn and start the other clock"><span class="sname"></span><span class="digits">75:00</span></button>
+			</div>
+			<div class="midblock" role="group" aria-label="Round">
 				<div class="round">
 					<button id="roundMinus" aria-label="Previous round">−</button>
 					<div><span class="rl">Round</span><span class="digits" id="roundNum">1</span></div>
 					<button id="roundPlus" aria-label="Next round">+</button>
 				</div>
+				<div class="round counter">
+					<button id="availMinus" aria-label="Less available supply">−</button>
+					<div><span class="rl">Available</span><span class="digits" id="availNum">00</span></div>
+					<button id="availPlus" aria-label="More available supply">+</button>
+				</div>
+				<div class="cmid">
+					<button id="clockPause" aria-label="Pause or resume the clock">▶</button>
+					<button id="clockSet" aria-label="Clock settings" aria-expanded="false" aria-controls="clockPop">⚙</button>
+				</div>
+				<button class="endround" id="endRound" title="Scoring &amp; Cleanup: decide who controls each Mission Marker, then start the next round">End round</button>
+			</div>
+			<div class="pblock flip" id="pblock1" role="group" aria-label="Player 2">
+				<button class="cside" id="clock1" title="Tap to end this player's turn and start the other clock"><span class="sname"></span><span class="digits">75:00</span></button>
+				<div class="supply" id="supply1" role="img"><span class="sname">Supply</span><span class="digits">00</span></div>
 				<button class="score" id="score1" aria-expanded="false" aria-controls="scorePop"><span class="sname"></span><span class="digits">00</span></button>
-				<div class="scorepop" id="scorePop" role="dialog" aria-label="Score by round" hidden></div>
 			</div>
-		</div>
-		<div class="topright">
-		<p class="credit">Created by Johan Dyrlind with Claude Code</p>
-		<!-- chess clock: tap your own clock to end your turn and start the other player's -->
-		<div class="clock" id="clock" role="group" aria-label="Chess clock">
-			<button class="cside" id="clock0" title="Tap to end this player's turn and start the other clock"><span class="sname"></span><span class="digits">75:00</span></button>
-			<div class="cmid">
-				<button id="clockPause" aria-label="Pause or resume the clock">▶</button>
-				<button id="clockSet" aria-label="Clock settings" aria-expanded="false" aria-controls="clockPop">⚙</button>
-			</div>
-			<button class="cside" id="clock1" title="Tap to end this player's turn and start the other clock"><span class="sname"></span><span class="digits">75:00</span></button>
+			<div class="scorepop" id="scorePop" role="dialog" aria-label="Score by round" hidden></div>
 			<div class="scorepop clockpop" id="clockPop" role="dialog" aria-label="Clock settings" hidden>
 				<h3>Chess clock</h3>
 				<div class="row"><label for="clockMin" class="note">Minutes each</label><input type="number" id="clockMin" min="1" max="600" style="width:80px"></div>
@@ -445,123 +502,12 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 				<div class="row"><button class="btn danger" id="clockReset">Reset clocks</button></div>
 			</div>
 		</div>
-		</div>
 	</header>
 
 	<!-- left: setting up the game -->
-	<aside class="panel left" aria-label="Setup">
-		<section class="box" id="onlineBox" aria-labelledby="onlineH">
-			<h2 id="onlineH">Online game</h2>
-			<p class="note" id="onlineChecking">Checking whether online play is available…</p>
-			<p class="note" id="onlineNA" hidden>Online play could not start: the connection library did not load. Check your internet connection and reload. You can still play on one screen.</p>
-			<div class="tabpanel" id="onlineOff" hidden>
-				<p class="note">Play this board with someone else live. Start a game and send them the link, or join with their code. Whoever starts the game hosts it: keep that tab open while you play.</p>
-				<button class="btn primary" id="netCreate">Start online game with this board</button>
-				<div class="row" style="flex-wrap:nowrap">
-					<input type="text" id="netCode" placeholder="Game code" maxlength="12" autocomplete="off" aria-label="Game code">
-					<button class="btn" id="netJoin">Join</button>
-				</div>
-			</div>
-			<div class="tabpanel" id="onlineOn" hidden>
-				<div class="row">
-					<span class="gamecode" id="netCodeShow"></span>
-					<button class="btn" id="netCopy">Copy link</button>
-					<button class="btn danger" id="netLeave" style="margin-left:auto">Leave</button>
-				</div>
-				<div class="field">
-					<label>You are</label>
-					<div class="pick" id="netSeat"></div>
-				</div>
-				<div class="field" id="netNameWrap">
-					<label for="netName">Your name</label>
-					<input type="text" id="netName" maxlength="24" autocomplete="off">
-				</div>
-				<p class="note" id="netPeers"></p>
-				<p class="note" id="netStatus"></p>
-			</div>
-		</section>
-
-		<nav class="tabs" role="tablist">
-			<button role="tab" id="tabUnitsBtn" aria-selected="true" data-tab="units">Army</button>
-			<button role="tab" id="tabTableBtn" aria-selected="false" data-tab="table">Table &amp; save</button>
-		</nav>
-
-		<div class="tabpanel" id="tab-units">
-			<section class="box">
-				<h2>Players</h2>
-				<div class="players" id="players"></div>
-			</section>
-
-			<form class="box" id="addForm" autocomplete="off">
-				<h2>Add miniatures</h2>
-				<div class="field" id="addCardWrap" hidden>
-					<label for="addCard">From card</label>
-					<select id="addCard"></select>
-				</div>
-				<div class="field">
-					<label for="addName">Name</label>
-					<input type="text" id="addName" placeholder="e.g. Marine Squad" maxlength="40">
-				</div>
-				<div class="field">
-					<label>Player</label>
-					<div class="pick" id="addPlayer"></div>
-				</div>
-				<div class="row">
-					<div class="field">
-						<label for="addBase">Base size</label>
-						<select id="addBase"></select>
-					</div>
-					<div class="field" id="customWrap" hidden>
-						<label for="addCustom">Diameter (mm)</label>
-						<input type="number" id="addCustom" min="10" max="200" value="45">
-					</div>
-					<div class="field" style="flex:0 0 64px">
-						<label for="addCount">Models</label>
-						<input type="number" id="addCount" min="1" max="30" value="1">
-					</div>
-					<div class="field" style="flex:0 0 64px">
-						<label for="addSupply" title="Supply cost of the whole unit">Supply</label>
-						<input type="number" id="addSupply" min="0" max="99" value="0">
-					</div>
-				</div>
-				<p class="note">Models added together form one unit. Its supply counts once while any of its models is on the table.</p>
-				<div class="row" hidden>
-				</div>
-				<label class="portrait-drop" id="portraitDrop" for="addPortrait">
-					<span class="pv" id="portraitPv">none</span>
-					<span class="note">Portrait: click to choose an image, drop one here, or paste. It is cropped to the circle.</span>
-				</label>
-				<input type="file" id="addPortrait" accept="image/*" class="hidden-file">
-				<button class="btn primary" type="submit">Add to table</button>
-			</form>
-
-			<section class="box" aria-labelledby="listH">
-				<h2 id="listH">Import army list</h2>
-				<p class="note">Paste a list exported from New Recruit. Its units go to the player's reserves, with bases, supply and portraits from your card library when it is loaded, and its Faction and Tactical cards to the card tracker.</p>
-				<div class="field">
-					<label>Player</label>
-					<div class="pick" id="listPlayer"></div>
-				</div>
-				<div class="field">
-					<label for="listExample">Or an example army from the rulebook (1000 Minerals)</label>
-					<select id="listExample"><option value="">Choose one…</option></select>
-				</div>
-				<textarea id="listText" rows="7" placeholder="Paste the army list here" aria-label="Army list"></textarea>
-				<label class="row" style="gap:6px;flex-wrap:nowrap"><input type="checkbox" id="listReplace" style="flex:none"> <span>Remove this player's models from the table first</span></label>
-				<div id="listPreview"></div>
-				<button class="btn primary" id="listAdd">Add army to table</button>
-			</section>
-
-			<section class="box">
-				<h2>On the table</h2>
-				<p class="note" id="exampleNote" hidden>These are example bases so the board is not empty. Rename them, give them portraits, or clear them under Table &amp; save.</p>
-				<div id="unitList"></div>
-			</section>
-		</div>
-
-		<div class="tabpanel" id="tab-table" hidden>
-			<section class="box">
-				<h2>Table</h2>
+	<aside class="panel left" aria-label="Setup and units">
+		<section class="box st-setup">
+				<h2><span class="stepn">1</span>Table &amp; deployment</h2>
 				<div class="field">
 					<label>Table mat</label>
 					<div class="matpick" id="matPick"></div>
@@ -597,10 +543,71 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 					<input type="text" id="rangesInput" placeholder="3, 6, 12">
 				</div>
 			</section>
-
-			<form class="box" id="terrainForm">
-				<h2>Terrain</h2>
-				<p class="note">Click a piece to place it in the middle of the table. Colours show its Size: scatter, low cover, sight-blocking, high ground, or grass (blocks sight but can be crossed). The rulebook suggests 8–12 pieces on a 54×36″ table.</p>
+		<section class="box st-setup">
+				<h2><span class="stepn">2</span>Armies</h2>
+				<div class="players" id="players"></div>
+			
+				<h3 id="listH">Import an army list</h3>
+				<p class="note" title="Its units go to the player's reserves, with bases, supply and portraits from your card library when it is loaded, and its Faction and Tactical cards to the card tracker">Paste a New Recruit list, or pick an example army.</p>
+				<div class="field">
+					<label>Player</label>
+					<div class="pick" id="listPlayer"></div>
+				</div>
+				<div class="field">
+					<label for="listExample">Or an example army from the rulebook (1000 Minerals)</label>
+					<select id="listExample"><option value="">Choose one…</option></select>
+				</div>
+				<textarea id="listText" rows="7" placeholder="Paste the army list here" aria-label="Army list"></textarea>
+				<label class="row" style="gap:6px;flex-wrap:nowrap"><input type="checkbox" id="listReplace" style="flex:none"> <span>Remove this player's models from the table first</span></label>
+				<div id="listPreview"></div>
+				<button class="btn primary" id="listAdd">Add army to table</button>
+						<details class="customunit">
+				<summary>Add a custom unit</summary>
+			<form id="addForm" class="addform" autocomplete="off">
+				<div class="field" id="addCardWrap" hidden>
+					<label for="addCard">From card</label>
+					<select id="addCard"></select>
+				</div>
+				<div class="field">
+					<label for="addName">Name</label>
+					<input type="text" id="addName" placeholder="e.g. Marine Squad" maxlength="40">
+				</div>
+				<div class="field">
+					<label>Player</label>
+					<div class="pick" id="addPlayer"></div>
+				</div>
+				<div class="row">
+					<div class="field">
+						<label for="addBase">Base size</label>
+						<select id="addBase"></select>
+					</div>
+					<div class="field" id="customWrap" hidden>
+						<label for="addCustom">Diameter (mm)</label>
+						<input type="number" id="addCustom" min="10" max="200" value="45">
+					</div>
+					<div class="field" style="flex:0 0 64px">
+						<label for="addCount">Models</label>
+						<input type="number" id="addCount" min="1" max="30" value="1">
+					</div>
+					<div class="field" style="flex:0 0 64px">
+						<label for="addSupply" title="Supply cost of the whole unit: it counts once while any of its models is on the table">Supply</label>
+						<input type="number" id="addSupply" min="0" max="99" value="0">
+					</div>
+				</div>
+				<div class="row" hidden>
+				</div>
+				<label class="portrait-drop" id="portraitDrop" for="addPortrait">
+					<span class="pv" id="portraitPv">none</span>
+					<span class="note">Portrait: click, drop or paste an image</span>
+				</label>
+				<input type="file" id="addPortrait" accept="image/*" class="hidden-file">
+				<button class="btn primary" type="submit">Add to table</button>
+			</form>
+			</details>
+		</section>
+			<form class="box st-setup" id="terrainForm">
+				<h2><span class="stepn">3</span>Terrain</h2>
+				<p class="note" title="Colours show its Size: scatter, low cover, sight-blocking, high ground, or grass (blocks sight but can be crossed). The rulebook suggests 8–12 pieces on a 54×36″ table.">Click a piece to place it. Q / E turns the selected piece.</p>
 				<div class="terrpick" id="terPresets"></div>
 				<details>
 					<summary>Custom piece</summary>
@@ -615,12 +622,22 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 					</div>
 					<button class="btn" type="submit">Add custom piece</button>
 				</details>
-				<p class="note">Select a piece and press Q / E to turn it. Inches.</p>
 			</form>
-
+		<section class="box st-setup">
+			<h2><span class="stepn">4</span>Start</h2>
+			<div class="row">
+				<button class="btn primary" id="startHere">Play here</button>
+				<button class="btn" id="startOnline">Play online…</button>
+			</div>
+		</section>
 			<section class="box">
+				<h2>On the table</h2>
+				<p class="note" id="exampleNote" hidden>These are example bases so the board is not empty. Rename them, give them portraits, or clear them under Save &amp; load in Setup.</p>
+				<div id="unitList"></div>
+			</section>
+			<section class="box st-setup">
 				<h2>Save &amp; load</h2>
-				<p class="note">The board is kept in this browser automatically. To move a game elsewhere, copy the game state and paste it on the other side.</p>
+				<p class="note">Kept in this browser. Copy the state to move a game elsewhere.</p>
 				<div class="row">
 					<button class="btn" id="copyState">Copy game state</button>
 					<label class="btn" for="loadFile">Load from file…</label>
@@ -633,7 +650,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 					<button class="btn" id="resetExample">Load example</button>
 				</div>
 			</section>
-			<section class="box">
+			<section class="box st-setup">
 				<h2>Card library</h2>
 				<p class="note" id="libStatus">No card library loaded yet. Load your library file (skirmish-library.json) to pick units from their cards, see their stats and read the rules here. It stays in this browser.</p>
 				<div class="row">
@@ -642,7 +659,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 					<button class="btn danger" id="libClear" hidden>Remove library</button>
 				</div>
 			</section>
-		</div>
+		<div id="leftRef"></div>
 	</aside>
 
 	<main class="board" id="board">
@@ -663,6 +680,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 				<button id="confirmAll" title="Shift+Enter">Confirm all moves</button>
 			</div>
 		</div>
+		<div class="atkpanel" id="atkPanel" hidden></div>
 		<!-- each player's reserves, pinned to the board's corners at any zoom; hover to open, drag onto the table to deploy -->
 		<div class="reserve r1" id="res1" aria-label="Player 2 reserves"></div>
 		<div class="reserve r0" id="res0" aria-label="Player 1 reserves"></div>
@@ -673,7 +691,9 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 			<div class="tacov" id="tac0" aria-label="Player 1 tactical cards"></div>
 		</div>
 		<div class="scale" aria-hidden="true"><div class="scale-bar" id="scaleBar"></div><span id="scaleLabel"></span></div>
-		<div class="helpinfo" tabindex="0" aria-label="How to use the table"><span class="ii" aria-hidden="true">i</span>
+		<button class="sidetog l" id="togLeft" aria-label="Hide the left panel" title="Hide the left panel ( [ )">‹</button>
+		<button class="sidetog r" id="togRight" aria-label="Hide the right panel" title="Hide the right panel ( ] )">›</button>
+		<div class="helpinfo" hidden tabindex="0" aria-label="How to use the table"><span class="ii" aria-hidden="true">i</span>
 			<div class="helpinfo-tip"><b>How to use the table</b>
 				<ul>
 					<li><b>Move:</b> drag a base; its unit follows in coherency (<b>Alt</b>+drag moves it alone). Drag again to add a leg.</li>
@@ -786,19 +806,18 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 		</section>
 
 
-		<section class="box" id="refNote">
+		<section class="box refbox" id="refNote">
 			<h2>Cards &amp; rules</h2>
-			<p class="note">Load your card library under Table &amp; save to browse unit cards and search the rules here.</p>
-			<p class="note">The official rules and unit cards are online: sign in as a guest, then open Factions &amp; Cards.</p>
+			<p class="note">Load your card library (Setup › Card library) to browse unit cards and search the rules here. Online: sign in as a guest, then Factions &amp; Cards.</p>
 			<a class="btn rulesite" href="https://sc.starcraft-tmg.com/" target="_blank" rel="noopener noreferrer" title="The official StarCraft TMG rules and unit cards (sign in as a guest, then Factions &amp; Cards)">Rules site ↗</a>
 		</section>
-		<section class="box" id="cardsBox" hidden>
+		<section class="box refbox" id="cardsBox" hidden>
 			<h2 class="withlink">Unit cards <a class="btn rulesite" href="https://sc.starcraft-tmg.com/" target="_blank" rel="noopener noreferrer" title="The official StarCraft TMG rules and unit cards (sign in as a guest, then Factions &amp; Cards)">Rules site ↗</a></h2>
 			<input type="text" id="cardSearch" placeholder="Search cards: name, role, tag…" autocomplete="off" aria-label="Search cards">
 			<div class="pick" id="factionPick"></div>
 			<ul class="ulist" id="cardList"></ul>
 		</section>
-		<section class="box" id="rulesBox" hidden>
+		<section class="box refbox" id="rulesBox" hidden>
 			<h2>Rules</h2>
 			<input type="text" id="rulesSearch" placeholder="Search the rules, e.g. charge, evade" autocomplete="off" aria-label="Search the rules">
 			<ul class="ulist" id="rulesList"></ul>
@@ -806,6 +825,39 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 	</aside>
 </div>
 
+<div class="dlg-back" id="onlineDlg" hidden>
+		<section class="box dlg" id="onlineBox" role="dialog" aria-modal="true" aria-labelledby="onlineH">
+			<h2 id="onlineH" class="withlink">Online game <button class="btn" id="onlineClose" aria-label="Close">✕</button></h2>
+			<p class="note" id="onlineChecking">Checking whether online play is available…</p>
+			<p class="note" id="onlineNA" hidden>Online play could not start: the connection library did not load. Check your internet connection and reload. You can still play on one screen.</p>
+			<div class="tabpanel" id="onlineOff" hidden>
+				<p class="note">Play this board with someone else live. Start a game and send them the link, or join with their code. Whoever starts the game hosts it: keep that tab open while you play.</p>
+				<button class="btn primary" id="netCreate">Start online game with this board</button>
+				<div class="row" style="flex-wrap:nowrap">
+					<input type="text" id="netCode" placeholder="Game code" maxlength="12" autocomplete="off" aria-label="Game code">
+					<button class="btn" id="netJoin">Join</button>
+				</div>
+			</div>
+			<div class="tabpanel" id="onlineOn" hidden>
+				<div class="row">
+					<span class="gamecode" id="netCodeShow"></span>
+					<button class="btn" id="netCopy">Copy link</button>
+					<button class="btn danger" id="netLeave" style="margin-left:auto">Leave</button>
+				</div>
+				<div class="field">
+					<label>You are</label>
+					<div class="pick" id="netSeat"></div>
+				</div>
+				<div class="field" id="netNameWrap">
+					<label for="netName">Your name</label>
+					<input type="text" id="netName" maxlength="24" autocomplete="off">
+				</div>
+				<p class="note" id="netPeers"></p>
+				<p class="note" id="netStatus"></p>
+			</div>
+		</section>
+
+</div>
 <input type="file" id="cardPortrait" accept="image/*" class="hidden-file">
 
 <!-- card and rules viewer -->
@@ -907,6 +959,8 @@ function normUnit(u) {
 		card: typeof u.card === 'string' && CARD_ID_RE.test(u.card) ? u.card : null,
 		// upgrades bought for the unit (from an imported army list)
 		upgrades: Array.isArray(u.upgrades) ? u.upgrades.slice(0, 12).map(x => String(x).slice(0, 40)).filter(Boolean) : [],
+		// from an army list: its upgrades are all it bought (none listed = none bought)
+		listed: !!u.listed,
 		// coherency in inches set by hand; null = 4 when the card says "Horizontal Coherency is 4", else 3
 		coh: u.coh === 3 || u.coh === 4 ? u.coh : null,
 		// glow around its bases to tell two units of the same type apart: '' none, null not assigned yet
@@ -942,7 +996,11 @@ function normMini(m) {
 		// damage taken: points off Health and off Shield (what is left = max - damage)
 		dmgH: clampN(m.dmgH, 0, 99, 0) | 0, dmgS: clampN(m.dmgS, 0, 99, 0) | 0,
 		// a faction token placed on the table (a Faction Indicator, a Force Field): no unit rules, moved freely
-		tok: typeof m.tok === 'string' && validTok(m.tok) ? m.tok : null };
+		tok: typeof m.tok === 'string' && validTok(m.tok) ? m.tok : null,
+		// the SPECIALIST weapon this model carries (core rules 9.1: one nominated model per SPECIALIST upgrade)
+		spec: typeof m.spec === 'string' && m.spec ? m.spec.slice(0, 40) : null,
+		// a glow on this model alone, over its unit's glow
+		glow: /^#[0-9a-f]{6}$/i.test(m.glow || '') ? m.glow : null };
 }
 function unitIdFor(m) {
 	const u = typeof m.unit === 'string' && ID_RE.test(m.unit) ? m.unit : null;
@@ -1155,7 +1213,9 @@ el.addEventListener('contextmenu', e => {
 	const n = unitModels(m).filter(x => !x.reserve).length, name = findUnit(m.unit)?.name || m.name;
 	ctxMenu.innerHTML = `<div class="ctxh">${esc(name)}</div>
 		<button role="menuitem" data-act="reserve">Send ${n > 1 ? `unit (${n} models)` : 'to'} to reserves</button>
+		${['actmove', 'actassault'].map(t => `<button role="menuitem" data-act="activate" data-t="${t}">${(findUnit(m.unit)?.tokens || []).some(x => x.split('@')[0] === t) ? '✓ ' : ''}Activated in the ${t === 'actmove' ? 'Movement' : 'Assault'} Phase</button>`).join('')}
 		<button role="menuitem" data-act="token">Add token…</button>
+		<div class="ctxglow" role="group" aria-label="Glow on this model only"><span>Glow on this model</span>${GLOW_COLOURS.map(([c, nm]) => `<button role="menuitem" data-act="mglow" data-c="${c}" title="${nm}" aria-label="${nm} glow on this model" aria-pressed="${m.glow === c}" style="--gc:${c}"></button>`).join('')}${m.glow ? '<button role="menuitem" data-act="mglow" data-c="" title="No glow of its own" aria-label="No glow of its own">✕</button>' : ''}</div>
 		${/adept/i.test(libCard(findUnit(m.unit)?.card)?.name || findUnit(m.unit)?.name || m.name) ? '<button role="menuitem" data-act="shade">Place Shade</button>' : ''}
 		${n > 1 ? '<button role="menuitem" data-act="unit">Select unit</button>' : ''}
 		<button role="menuitem" data-act="blast">Place Blast Template on it</button>`.replace('Send to to', 'Send to');
@@ -1189,6 +1249,17 @@ ctxMenu.addEventListener('click', e => {
 	if (b.dataset.act === 'reserve') toReserves(m);
 	else if (b.dataset.act === 'shade') placeShade(m);
 	else if (b.dataset.act === 'token') openTokPick(ensureUnit(m), menuAt.left, menuAt.top);
+	else if (b.dataset.act === 'activate') {
+		const u = ensureUnit(m), t = b.dataset.t, had = (u.tokens || []).find(x => x.split('@')[0] === t);
+		if (had) setTokens(u, u.tokens.filter(x => x !== had), `${esc(u.name)}: ${tokInfo(t).t.toLowerCase()} taken off`);
+		else addToken(u, t + '@' + u.player);
+	}
+	else if (b.dataset.act === 'mglow') {
+		const c = b.dataset.c || null;
+		undoStack.push({ t: 'mglow', id: m.id, glow: m.glow || null });
+		m.glow = c; refreshGlow(objs.get(m.id)); save();
+		toast(c ? `${esc(m.name)} glows on its own` : `${esc(m.name)} has its unit's glow again`);
+	}
 	else if (b.dataset.act === 'unit') selectUnitOf(m);
 });
 document.addEventListener('pointerdown', e => { if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) closeCtx(); }, true);
@@ -1770,10 +1841,26 @@ const statNum = v => { const n = parseInt(v, 10); return Number.isFinite(n) && n
 // max Health and Shield of one model of a unit, and where they came from
 function statsOf(unitId) {
 	const u = findUnit(unitId); if (!u) return { hp: 0, sh: 0 };
-	const c = libCard(u.card)?.stats, mem = statMem[unitType(u)];
-	const hp = u.hp ?? (c?.hitPoints != null ? statNum(c.hitPoints) : null) ?? mem?.hp ?? 0;
-	const sh = u.sh ?? (c ? statNum(c.shield) : null) ?? mem?.sh ?? 0;
-	return { hp, sh, card: !!c, hpAuto: u.hp == null, shAuto: u.sh == null };
+	const card = libCard(u.card), c = card?.stats, mem = statMem[unitType(u)], up = upgradeBonus(u, card);
+	const hp = u.hp ?? (c?.hitPoints != null ? statNum(c.hitPoints) + up.hp : null) ?? mem?.hp ?? 0;
+	const sh = u.sh ?? (c ? statNum(c.shield) + up.sh : null) ?? mem?.sh ?? 0;
+	return { hp, sh, card: !!c, hpAuto: u.hp == null, shAuto: u.sh == null, up };
+}
+// Health and Shield an upgrade the unit bought adds outright
+function upgradeBonus(u, card) {
+	const out = { hp: 0, sh: 0, names: [] };
+	if (!card || !u.upgrades?.length) return out;
+	const bought = new Set(u.upgrades.map(cardKey));
+	for (const a of card.abilities || []) {
+		if (!a?.upgrade || !bought.has(cardKey(a.name))) continue;
+		const t = String(a.text || '');
+		if (/^\s*(while|if|when|until)\b/i.test(t)) continue;
+		const m = /increase this unit's (hit points|health|shield)s? characteristic by (\d+)/i.exec(t);
+		if (!m) continue;
+		if (/shield/i.test(m[1])) out.sh += +m[2]; else out.hp += +m[2];
+		out.names.push(a.name);
+	}
+	return out;
 }
 function healthOf(m) {
 	const st = statsOf(m.unit);
@@ -1801,14 +1888,39 @@ function drawDamage(x, c, ri, m) {
 	}
 }
 function dmgSig(m) { const d = healthOf(m); return (m.dmgH || m.dmgS) && d.hp ? `${d.h}/${d.s}/${d.sh ? 1 : 0}` : ''; }
+// the unit's models, in the order they take damage: one already wounded first, then from the back of the unit,
+// specialists last; models in reserves cannot be hit
+function damageOrder(unitId) {
+	const ms = state.minis.filter(x => x.unit === unitId && !x.tok && !x.reserve);
+	const hurt = x => (x.dmgH || 0) + (x.dmgS || 0) > 0;
+	return ms.filter(x => !isDead(x)).sort((a, b) => (hurt(b) - hurt(a)) || ((!!a.spec) - (!!b.spec)) || (ms.indexOf(b) - ms.indexOf(a)));
+}
+// delta > 0 takes that much damage on the unit, delta < 0 heals it back (the model wounded last first)
 function setDamage(m, key, delta) {
 	const st = statsOf(m.unit), max = key === 'dmgH' ? st.hp : st.sh;
-	const v = Math.max(0, Math.min(max, (m[key] || 0) + delta));
-	if (v === (m[key] || 0)) return;
-	undoStack.push({ t: 'dmg', items: [{ id: m.id, dmgH: m.dmgH || 0, dmgS: m.dmgS || 0 }] });
-	m[key] = v;
-	refreshFace(objs.get(m.id)); renderLists(); renderCard(); save();
-	if (key === 'dmgH' && v === max) toast(`${esc(m.name)} is destroyed` + (lastKillMsg ? `: ${lastKillMsg}` : ': Remove takes it off the table'));
+	if (!max) return;
+	const before = new Map(state.minis.filter(x => x.unit === m.unit).map(x => [x.id, { id: x.id, dmgH: x.dmgH || 0, dmgS: x.dmgS || 0 }]));
+	const killed = [];
+	for (let k = 0; k < Math.abs(delta); k++) {
+		if (delta > 0) {
+			const order = damageOrder(m.unit);
+			const t = key === 'dmgS' ? order.find(x => healthOf(x).s > 0) : order[0];
+			if (!t) break;
+			t[key] = (t[key] || 0) + 1;
+			if (key === 'dmgH' && healthOf(t).h === 0) killed.push(t);
+		} else {
+			const ms = state.minis.filter(x => x.unit === m.unit && !x.tok && (x[key] || 0) > 0);
+			const t = ms.find(x => !isDead(x)) || ms.find(isDead);
+			if (!t) break;
+			t[key]--;
+		}
+	}
+	const items = [...before.values()].filter(b => { const x = findMini(b.id); return x && ((x.dmgH || 0) !== b.dmgH || (x.dmgS || 0) !== b.dmgS); });
+	if (!items.length) return;
+	undoStack.push({ t: 'dmg', items });
+	for (const b of items) refreshFace(objs.get(b.id));
+	renderLists(); renderCard(); save();
+	for (const t of killed) toast(`${esc(t.name)} is destroyed` + (lastKillMsg ? `: ${lastKillMsg}` : '. Remove it, or another model of the unit, from the table'));
 }
 function rechargeShields(m) {
 	const ms = unitModels(m).filter(x => x.dmgS);
@@ -1821,13 +1933,18 @@ function rechargeShields(m) {
 function dmgHtml(m) {
 	const d = healthOf(m);
 	if (!d.hp) return '<div class="dmgbox"><span class="note">No Health known for this unit: set it under Health below and it is remembered for this unit type.</span></div>';
-	const slot = (cls, label, key, left, max) => `<span class="stepper ${cls}" title="${label}">
-			<button data-dmg="${key}" data-v="1" aria-label="Take 1 ${label} damage">−</button>
-			<span class="supval">${left}/${max}<small>${label.toLowerCase()}</small></span>
-			<button data-dmg="${key}" data-v="-1" aria-label="Restore 1 ${label}">+</button></span>`;
-	return `<div class="dmgbox">${d.sh ? slot('sh', 'Shield', 'dmgS', d.s, d.sh) : ''}${slot('hp', 'Health', 'dmgH', d.h, d.hp)}
-		${d.sh && unitModels(m).some(x => x.dmgS) ? '<button class="btn" id="cardRecharge" title="Every model in this unit back to full Shield">Recharge shields</button>' : ''}
-		${d.h === 0 ? '<span class="note dead">Destroyed</span>' : ''}</div>`;
+	// the whole unit: what is left of its Health and Shield, over every model
+	const ms = state.minis.filter(x => x.unit === m.unit && !x.tok), all = ms.length, lost = ms.filter(isDead).length;
+	const left = k => ms.reduce((a, x) => a + healthOf(x)[k], 0);
+	const slot = (cls, label, key, l, max) => `<span class="stepper ${cls}" title="${label} of the whole unit">
+			<button data-dmg="${key}" data-v="1" aria-label="The unit takes 1 ${label} damage">−</button>
+			<span class="supval">${l}/${max}<small>${label.toLowerCase()}</small></span>
+			<button data-dmg="${key}" data-v="-1" aria-label="Restore 1 ${label} to the unit">+</button></span>`;
+	const hurt = damageOrder(m.unit).find(x => (x.dmgH || 0) + (x.dmgS || 0) > 0);
+	return `<div class="dmgbox"><span class="note">Unit damage</span>${d.sh ? slot('sh', 'Shield', 'dmgS', left('s'), d.sh * all) : ''}${slot('hp', 'Health', 'dmgH', left('h'), d.hp * all)}
+		${d.sh && ms.some(x => x.dmgS) ? '<button class="btn" id="cardRecharge" title="Every model in this unit back to full Shield">Recharge shields</button>' : ''}
+		<span class="note">${lost ? `${lost} of ${all} models destroyed` : `${all} model${all === 1 ? '' : 's'}, ${d.hp} Health each`}${d.up?.names.length ? ` (${esc(d.up.names.join(', '))})` : ''}${hurt ? ` · ${esc(hurt.name)} is wounded` : ''}</span>
+		${d.h === 0 ? '<span class="note dead">This model is destroyed</span>' : ''}</div>`;
 }
 function bindDmg(m) {
 	document.querySelectorAll('.dmgbox [data-dmg]').forEach(b => b.addEventListener('click', () => setDamage(m, b.dataset.dmg, Number(b.dataset.v))));
@@ -1835,7 +1952,8 @@ function bindDmg(m) {
 }
 function refreshAllFaces() { for (const o of objs.values()) if (o.kind === 'mini') { refreshFace(o); refreshGlow(o); } }
 function refreshGlow(o) {
-	const m = findMini(o.id), c = m && findUnit(m.unit)?.glow;
+	if (!o) return;
+	const m = findMini(o.id), c = m && (m.glow || findUnit(m.unit)?.glow);
 	o.glow.visible = !!c;
 	if (c) o.glow.material.color.set(c);
 }
@@ -1902,6 +2020,7 @@ function addMiniObj(m) {
 		const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.04, r, 120), new THREE.MeshBasicMaterial({ color: 0xff9a4a, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false }));
 		edge.rotation.x = -Math.PI / 2; edge.position.y = BASE_H + 0.03; edge.renderOrder = 7; g.add(edge);
 	}
+	if (m.tok && m.tok !== 'blast' && m.tok !== 'shade') { cyl.scale.y = 0.4; cyl.position.y = BASE_H * 0.2; top.position.y = BASE_H * 0.4 + 0.001; cyl.castShadow = false; }
 	cyl.userData.ref = top.userData.ref = o;
 	objs.set(m.id, o); pickables.push(cyl, top);
 	refreshFace(o); refreshGlow(o);
@@ -2109,6 +2228,7 @@ function selectMarker(n) {
 	selMarker = n;
 	for (const [k, v] of markerViz) v.selRing.visible = String(k) === String(n);
 }
+let hoverId = null;   // the model under the pointer: its distance shows too
 function updateDistances() {
 	const s = sel?.kind === 'mini' ? findMini(sel.id) : null;
 	const seen = new Set();
@@ -2119,33 +2239,40 @@ function updateDistances() {
 			seen.add(m.id);
 			let L = distLabels.get(m.id);
 			if (!L) { L = makeLabel('dist'); distLabels.set(m.id, L); }
-			const r = radius(m), txt = fmt(Math.max(0, Math.hypot(m.x - mk.px, m.z - mk.pz) - MARKER_R - r));
+			const mp = shownAt(m), r = radius(m), txt = fmt(Math.max(0, Math.hypot(mp.x - mk.px, mp.z - mk.pz) - MARKER_R - r));
 			if (L.text !== txt) { L.text = txt; L.el.textContent = txt; }
 			const fs = Math.round(Math.min(20, Math.max(9, 2 * r * pxPerIn * 0.3)));
 			if (L.fs !== fs) { L.fs = fs; L.el.style.fontSize = fs + 'px'; }
 			L.center = true; L.on = true;
-			L.pos.set(m.x, BASE_H, m.z);
+			L.pos.set(mp.x, BASE_H, mp.z);
 		}
 	}
 	if (s?.tok === 'blast') blastCover(s, seen);
 	else if (s) {
-		const rs = radius(s);
+		const rs = radius(s), sp = shownAt(s), near = new Map();
 		for (const m of state.minis) {
-			if (m.id === s.id || m.reserve) continue;
+			if (m.id === s.id || m.reserve || m.unit === s.unit) continue;
+			const mp = shownAt(m), dd = Math.hypot(mp.x - sp.x, mp.z - sp.z) - radius(m), k = m.tok ? m.id : m.unit;
+			if (!near.has(k) || dd < near.get(k).d) near.set(k, { id: m.id, d: dd });
+		}
+		const show = new Set([...near.values()].map(v => v.id));
+		if (hoverId) show.add(hoverId);
+		for (const m of state.minis) {
+			if (m.id === s.id || m.reserve || !show.has(m.id)) continue;
 			seen.add(m.id);
 			let L = distLabels.get(m.id);
 			if (!L) { L = makeLabel('dist'); distLabels.set(m.id, L); }
-			const r = radius(m), txt = fmt(Math.max(0, Math.hypot(m.x - s.x, m.z - s.z) - rs - r));
+			const mp = shownAt(m), r = radius(m), txt = fmt(Math.max(0, Math.hypot(mp.x - sp.x, mp.z - sp.z) - rs - r));
 			if (L.text !== txt) { L.text = txt; L.el.textContent = txt; }
 			// text sits inside the base, sized to the base's width on screen
 			const fs = Math.round(Math.min(20, Math.max(9, 2 * r * pxPerIn * 0.3)));
 			if (L.fs !== fs) { L.fs = fs; L.el.style.fontSize = fs + 'px'; }
 			L.center = true; L.on = true;
-			L.pos.set(m.x, BASE_H, m.z);
+			L.pos.set(mp.x, BASE_H, mp.z);
 		}
 	}
 	if (s && !s.reserve && s.tok !== 'blast') {
-		const rs = radius(s), put = (key, txt, x, z, fs) => {
+		const sp = shownAt(s), rs = radius(s), put = (key, txt, x, z, fs) => {
 			seen.add(key);
 			let L = distLabels.get(key);
 			if (!L) { L = makeLabel('dist'); distLabels.set(key, L); }
@@ -2154,9 +2281,9 @@ function updateDistances() {
 			L.center = true; L.on = true; L.pos.set(x, BASE_H, z);
 		};
 		const fsM = Math.round(Math.min(18, Math.max(9, 2 * MARKER_R * pxPerIn * 0.3)));
-		for (const [n, v] of markerViz) put('mk' + n, fmt(Math.max(0, Math.hypot(v.px - s.x, v.pz - s.z) - rs - MARKER_R)), v.px, v.pz, fsM);
+		for (const [n, v] of markerViz) put('mk' + n, fmt(Math.max(0, Math.hypot(v.px - sp.x, v.pz - sp.z) - rs - MARKER_R)), v.px, v.pz, fsM);
 		if (s.tok) for (const t of state.terrain) {
-			const q = terrainNearest(t, s.x, s.z);
+			const q = terrainNearest(t, sp.x, sp.z);
 			put('tr' + t.id, fmt(Math.max(0, q.d - rs)), q.x, q.z, 12);
 		}
 	}
@@ -2229,8 +2356,9 @@ function drawRanges() {
 	syncRanges();
 }
 function syncRanges() {
-	const m = sel?.kind === 'mini' ? findMini(sel.id) : null;
-	if (!m) return;
+	const sm = sel?.kind === 'mini' ? findMini(sel.id) : null;
+	if (!sm) return;
+	const m = shownAt(sm);
 	rangeGroup.position.set(m.x, 0, m.z);
 	for (const L of rangeLabels) L.pos.set(m.x + L.off.x, 0.3, m.z + L.off.z);
 }
@@ -2246,8 +2374,8 @@ function pick(e) {
 	aim(e);
 	const hits = ray.intersectObjects(pickables, false);
 	if (!hits.length) return null;
-	const isMini = h => h.object.userData.ref.kind === 'mini', isBlast = h => findMini(h.object.userData.ref.id)?.tok === 'blast';
-	return (hits.find(h => isMini(h) && !isBlast(h)) || hits.find(isMini) || hits[0]).object.userData.ref;
+	const isMini = h => h.object.userData.ref.kind === 'mini', isTok = h => !!findMini(h.object.userData.ref.id)?.tok, isBlast = h => findMini(h.object.userData.ref.id)?.tok === 'blast';
+	return (hits.find(h => isMini(h) && !isTok(h)) || hits.find(h => isMini(h) && !isBlast(h)) || hits.find(isMini) || hits[0]).object.userData.ref;
 }
 function tablePoint(e) { aim(e); const p = new V3(); return ray.ray.intersectPlane(floor, p) ? p : null; }
 function itemOf(ref) { return ref.kind === 'mini' ? findMini(ref.id) : findTerrain(ref.id); }
@@ -2271,6 +2399,7 @@ function onDown(e) {
 	}
 	// Shift (or Ctrl) + click adds or removes a model from the selection; Shift + drag on the table draws a selection box
 	if (e.shiftKey || e.ctrlKey || e.metaKey) {
+		if (hit?.kind === 'mini' && !e.shiftKey) { down.ctrlHit = hit; down.pid = e.pointerId; el.setPointerCapture(e.pointerId); controls.enabled = false; return; }
 		if (hit?.kind === 'mini') { toggleMulti(hit.id); down = null; return; }
 		if (!hit) {
 			const r = boardEl.getBoundingClientRect();
@@ -2280,6 +2409,9 @@ function onDown(e) {
 			return;
 		}
 	}
+	beginDrag(e, hit);
+}
+function beginDrag(e, hit) {
 	if (!hit) return;                          // empty table: let OrbitControls pan
 	if (hit.kind === 'terrain' && state.table.lockTerrain) { select('terrain', hit.id); return; }   // locked: select only, the drag pans
 	const p = tablePoint(e); if (!p) return;
@@ -2298,7 +2430,9 @@ function onDown(e) {
 	if (fresh && !e.altKey) startGroup(item);                    // the rest of the unit follows this, the Leading Model
 }
 function onMove(e) {
+	lastMoveEv = e;
 	if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) down.click = false;
+	if (down?.ctrlHit && !down.click && !drag) { const h = down.ctrlHit; down.ctrlHit = null; beginDrag(e, h); }
 	if (box) {
 		const r = boardEl.getBoundingClientRect();
 		box.x1 = e.clientX - r.left; box.y1 = e.clientY - r.top;
@@ -2319,8 +2453,10 @@ function onMove(e) {
 			const max = radius(L) + coherencyOf(L.unit) - r, dx = x - L.x, dz = z - L.z, dist = Math.hypot(dx, dz);
 			if (dist > max && max > 0) { x = L.x + dx / dist * max; z = L.z + dz / dist * max; }
 		}
+		if ((e.ctrlKey || e.metaKey || ctrlHeld) && drag.ref.kind === 'mini' && !it.tok) ({ x, z } = clearSpot(it, x, z));
 		it.x = x; it.z = z; drag.moved = true;
 		objs.get(it.id).g.position.set(x, 0, z);
+		if (drag.ref.kind === 'mini' && !it.tok && !drag.follower) { const ob = objs.get(it.id); if (ob) ob.bad.visible = !!placeIssues(it); }
 		if (drag.follower) { updateCoherency(drag.follower); sendMoves(); }
 		else if (drag.ref.kind === 'mini' && it.tok) syncRanges();
 		else if (drag.ref.kind === 'mini') { drawMove(moves.get(it.id)); if (groups.has(it.id)) layoutFollowers(it.id); syncRanges(); sendMoves(); }
@@ -2337,6 +2473,7 @@ function onMove(e) {
 	}
 	if (e.buttons) return;
 	const hit = pick(e);
+	hoverId = hit?.kind === 'mini' ? hit.id : null;
 	el.style.cursor = hit ? 'grab' : (mode === 'measure' ? 'crosshair' : 'default');
 	if (hit?.kind === 'mini') {
 		const m = findMini(hit.id), r = boardEl.getBoundingClientRect();
@@ -2371,6 +2508,11 @@ function onUp(e) {
 		return;
 	}
 	if (drag) {
+		if (drag.ref.kind === 'mini' && !drag.item.tok && drag.moved) {
+			const q = placeIssues(drag.item), ob = objs.get(drag.item.id);
+			if (!drag.follower && ob) ob.bad.visible = false;
+			if (q) toast(placeMsg(drag.item, q));
+		}
 		if (drag.ref.kind === 'mini' && !drag.item.tok) {
 			// a model's move waits for Enter / the green tick, or Esc / the red cross
 			const it = drag.item, mv = moves.get(it.id);
@@ -2396,6 +2538,8 @@ function onUp(e) {
 	} else if (measure?.active) {
 		measure.active = false;
 		if (down?.click) { measure = null; updateMeasure(); }
+	} else if (down?.ctrlHit) {
+		if (down.click && e.type === 'pointerup') toggleMulti(down.ctrlHit.id);
 	} else if (down?.click && mode === 'move' && e.type === 'pointerup') {
 		const tp = tablePoint(e), mk = tp && [...markerViz].find(([, v]) => Math.hypot(tp.x - v.px, tp.z - v.pz) <= MARKER_R);
 		select(null);
@@ -2409,6 +2553,13 @@ function onUp(e) {
 // A move is the base's centre line in one or more straight legs; picking the model up again adds a leg.
 // Nothing is accepted until that model's tick (or Enter) is pressed; its cross (or Esc) puts it back.
 const moves = new Map();   // mini id -> { id, points: [{x, z}, ...] start + every drop point, ghost, legs, label, ui }
+const recentDone = new Map();   // mini id -> { x, z, t }: moves confirmed here in the last seconds, told to the other player
+let overridden = new Set();     // models drawn where the other player's move shows them, not where they were saved
+const landing = new Map();      // mini id -> { x, z, until }: the other player confirmed it there; held until it is saved
+const landSeen = new Set();
+// where a model is shown: the other player's move in progress (or just confirmed) moves it before it is saved
+function shownAt(m) { const o = (overridden.has(m.id) || landing.has(m.id)) && objs.get(m.id); return o ? o.g.position : m; }
+function noteDone(id) { const m = findMini(id); if (m) recentDone.set(id, { x: r3(m.x), z: r3(m.z), t: Date.now() }); }
 function makeFlat(geo, color, opacity, order) {
 	const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false }));
 	m.renderOrder = order; m.visible = false; scene.add(m);
@@ -2494,18 +2645,18 @@ function confirmMove(id) {
 		const items = [];
 		for (const fid of [...g.off.keys()]) {
 			const f = findMini(fid), fm = moves.get(fid);
-			if (f && fm && (f.x !== fm.points[0].x || f.z !== fm.points[0].z)) items.push({ id: fid, from: fm.points[0], to: { x: f.x, z: f.z } });
+			if (f && fm && (f.x !== fm.points[0].x || f.z !== fm.points[0].z)) { items.push({ id: fid, from: fm.points[0], to: { x: f.x, z: f.z } }); noteDone(fid); }
 			dropMove(fid);
 		}
 		dropGroup(id, false);
 		const m = findMini(id), s = mv.points[0];
-		if (m && (m.x !== s.x || m.z !== s.z)) items.unshift({ id, from: s, to: { x: m.x, z: m.z } });
+		if (m && (m.x !== s.x || m.z !== s.z)) { items.unshift({ id, from: s, to: { x: m.x, z: m.z } }); noteDone(id); }
 		if (items.length) undoStack.push({ t: 'moves', items });
 		dropMove(id); save(); sendMoves();
 		return;
 	}
 	const m = findMini(id), s = mv.points[0];
-	if (m && (m.x !== s.x || m.z !== s.z)) undoStack.push({ t: 'move', kind: 'mini', id, from: s, to: { x: m.x, z: m.z } });
+	if (m && (m.x !== s.x || m.z !== s.z)) { undoStack.push({ t: 'move', kind: 'mini', id, from: s, to: { x: m.x, z: m.z } }); noteDone(id); }
 	dropMove(id); save(); sendMoves();
 }
 function confirmAll() {
@@ -2638,9 +2789,47 @@ function terrainHit(x, z, r) {
 }
 function spotOk(m, x, z) {
 	const r = radius(m), { w, d } = state.table;
-	if (Math.abs(x) > w / 2 + r || Math.abs(z) > d / 2 + r) return false;
-	for (const o of state.minis) if (o.id !== m.id && !o.reserve && Math.hypot(o.x - x, o.z - z) < radius(o) + r + 0.03) return false;
+	if (Math.abs(x) > w / 2 - r + 1e-6 || Math.abs(z) > d / 2 - r + 1e-6) return false;   // wholly on the table
+	for (const o of state.minis) if (o.id !== m.id && !o.reserve && !o.tok && Math.hypot(o.x - x, o.z - z) < radius(o) + r + 0.03) return false;
 	return !terrainHit(x, z, r);
+}
+// what is wrong with where a model stands: part of its base off the table, or on another model's base (tokens aside)
+function placeIssues(m) {
+	if (!m || m.reserve || m.tok) return null;
+	const r = radius(m), { w, d } = state.table;
+	const off = Math.abs(m.x) > w / 2 - r + 0.005 || Math.abs(m.z) > d / 2 - r + 0.005;
+	const over = state.minis.filter(o => o.id !== m.id && !o.reserve && !o.tok && Math.hypot(o.x - m.x, o.z - m.z) < radius(o) + r - 0.02);
+	return off || over.length ? { off, over } : null;
+}
+function placeMsg(m, q) {
+	const parts = [];
+	if (q.off) parts.push(`${esc(m.name)} is not fully on the table`);
+	if (q.over.length) parts.push(`${esc(m.name)} overlaps ${q.over.slice(0, 3).map(o => esc(o.name)).join(', ')}${q.over.length > 3 ? ` and ${q.over.length - 3} more` : ''}`);
+	return parts.join('. ') + '. Hold Ctrl while dragging to keep it clear.';
+}
+// Ctrl is also followed from the keyboard, so pressing it in the middle of a drag (mouse still) counts at once
+let ctrlHeld = false;
+addEventListener('keydown', e => { if (e.key === 'Control' || e.key === 'Meta') { ctrlHeld = true; if (drag && lastMoveEv) onMove(lastMoveEv); } });
+addEventListener('keyup', e => { if (e.key === 'Control' || e.key === 'Meta') ctrlHeld = false; });
+addEventListener('blur', () => { ctrlHeld = false; });
+let lastMoveEv = null;
+// Ctrl held while dragging: the nearest spot wholly on the table and touching, not overlapping, other bases
+function clearSpot(m, x, z) {
+	const r = radius(m), { w, d } = state.table, others = state.minis.filter(o => o.id !== m.id && !o.reserve && !o.tok);
+	const clampT = () => { x = Math.min(w / 2 - r, Math.max(-w / 2 + r, x)); z = Math.min(d / 2 - r, Math.max(-d / 2 + r, z)); };
+	clampT();
+	for (let k = 0; k < 12; k++) {
+		let moved = false;
+		for (const o of others) {
+			const dx = x - o.x, dz = z - o.z, dist = Math.hypot(dx, dz), need = radius(o) + r + 0.001;
+			if (dist >= need) continue;
+			const ux = dist > 1e-6 ? dx / dist : 1, uz = dist > 1e-6 ? dz / dist : 0;
+			x = o.x + ux * need; z = o.z + uz * need; moved = true;
+		}
+		clampT();
+		if (!moved) break;
+	}
+	return { x, z };
 }
 // set each follower at its place in the formation, or the nearest free spot to it
 function layoutFollowers(lid) {
@@ -3010,6 +3199,9 @@ function undo() {
 		const it = a.kind === 'mini' ? findMini(a.id) : findTerrain(a.id);
 		if (it) { it.x = a.from.x; it.z = a.from.z; objs.get(it.id).g.position.set(it.x, 0, it.z); }
 		syncRanges(); updateMeasure();
+	} else if (a.t === 'mglow') {
+		const m = findMini(a.id);
+		if (m) { m.glow = a.glow; refreshGlow(objs.get(m.id)); }
 	} else if (a.t === 'tok') {
 		const u = findUnit(a.unit);
 		if (u) { u.tokens = a.tokens; renderCard(); }
@@ -3169,6 +3361,10 @@ const TOK_CAT = [{"id":"hidden","f":"G","ic":"hidden","t":"HIDDEN","col":"#fafaf
 TOK_ICONS.shade = "<path d=\"M7.5 19.5 V11 a5 5 0 0 1 10 0 V19.5 l-2.5 -2 -2.5 2 -2.5 -2 Z\" fill=\"#2b2e31\"/><ellipse cx=\"10.6\" cy=\"11.2\" rx=\"0.75\" ry=\"1.1\" fill=\"#ffdd1a\"/><ellipse cx=\"14.4\" cy=\"11.2\" rx=\"0.75\" ry=\"1.1\" fill=\"#ffdd1a\"/>";
 TOK_ICONS.tumor = "<circle cx=\"12.5\" cy=\"12.5\" r=\"3.9\" fill=\"#2b2e31\"/><path d=\"M16.50 12.50 Q19.09 14.18 20.06 16.15\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M15.33 15.33 Q15.97 18.35 15.26 20.43\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.50 16.50 Q10.82 19.09 8.85 20.06\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M9.67 15.33 Q6.65 15.97 4.57 15.26\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M8.50 12.50 Q5.91 10.82 4.94 8.85\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M9.67 9.67 Q9.03 6.65 9.74 4.57\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M12.50 8.50 Q14.18 5.91 16.15 4.94\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M15.33 9.67 Q18.35 9.03 20.43 9.74\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>";
 TOK_ICONS.siege = "<rect x=\"10\" y=\"8.6\" width=\"5\" height=\"2.8\" fill=\"#2b2e31\"/><line x1=\"14.6\" y1=\"9.6\" x2=\"20.4\" y2=\"7.5\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><polygon points=\"7,15 18,15 16.6,12.2 8.4,12.2\" fill=\"#2b2e31\"/><line x1=\"8.2\" y1=\"15.2\" x2=\"6\" y2=\"18.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"16.8\" y1=\"15.2\" x2=\"19\" y2=\"18.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"11\" y1=\"15.2\" x2=\"10.5\" y2=\"18.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><line x1=\"14\" y1=\"15.2\" x2=\"14.5\" y2=\"18.4\" fill=\"none\" stroke=\"#2b2e31\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>";
+TOK_ICONS.actmove = '<path d="M5 12.5h11.5" fill="none" stroke="#2b2e31" stroke-width="2.2" stroke-linecap="round"/><path d="M12.5 7l6 5.5-6 5.5" fill="none" stroke="#2b2e31" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>';
+TOK_ICONS.actassault = '<circle cx="12.5" cy="12.5" r="6.2" fill="none" stroke="#2b2e31" stroke-width="1.7"/><circle cx="12.5" cy="12.5" r="1.5" fill="#2b2e31"/><path d="M12.5 3.5v5M12.5 16.5v5M3.5 12.5h5M16.5 12.5h5" stroke="#2b2e31" stroke-width="1.7" stroke-linecap="round"/>';
+TOK_CAT.push({ id: 'actmove', f: 'G', ic: 'actmove', t: 'ACTIVATED: MOVEMENT', col: '#fafafa', round: false, s: 'The unit has activated in the Movement Phase this round' });
+TOK_CAT.push({ id: 'actassault', f: 'G', ic: 'actassault', t: 'ACTIVATED: ASSAULT', col: '#fafafa', round: false, s: 'The unit has activated in the Assault Phase this round' });
 TOK_CAT.push({ id: 'siege', f: 'T', ic: 'siege', t: 'SIEGE MODE', col: '#6f9fd8', round: false, s: 'Siege Tank: in Siege Mode' });
 TOK_CAT.push({ id: 'shade', f: 'P', ic: 'shade', t: 'SHADE', col: '#ffdd1a', round: true, place: true, mm: 40, s: 'Adept: its Shade, a see-through copy of the Adept on a 40 mm base. Right-click an Adept to place one next to it' });
 TOK_CAT.push({ id: 'tumor', f: 'Z', ic: 'tumor', t: 'CREEP TUMOR', col: '#a678c8', round: true, place: true, mm: 32, s: 'Zerg: a Creep Tumor on a 32 mm token', any: 'Z' });
@@ -3178,6 +3374,7 @@ TOK_CAT.push({ id: 'forcefield', f: 'P', ic: 'guardian', t: 'FORCE FIELD', col: 
 const TOK_FACTIONS = { P: ['Protoss', '#ffdd1a'], T: ['Terran', '#6f9fd8'], Z: ['Zerg', '#a678c8'], G: ['Any faction', '#fafafa'] };
 const TOK_INK = '#2b2e31', TOK_STATS = ['SPD', 'ARM', 'EVA', 'HIT', 'ROA', 'RNG'];
 const TOK_SIZE = 25 * MM;   // a 25 mm token, true to scale on the table
+const TOK_H = BASE_H * 0.4;   // tokens are flat card: lower than any base, so a model stands over them
 // a token by id: a catalogue entry, or a Buff/Debuff text token "txt:STAT:+2:F"
 const ENEMY_TOKS = new Set(['sword', 'feedback', 'markdeath', 'lock', 'flare', 'seeker', 'carapace', 'executor']);
 for (const c of TOK_CAT) c.tgt = ENEMY_TOKS.has(c.id) || /^txt:[A-Z]+:-/.test(c.id) ? 'enemy' : 'friendly';
@@ -3272,8 +3469,8 @@ function updateTokenStrips() {
 			const cv = document.createElement('canvas'); cv.width = 138 * n; cv.height = 128;
 			const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
 			const mesh = new THREE.Mesh(new THREE.PlaneGeometry(TOK_SIZE * n * 138 / 128, TOK_SIZE).rotateX(-Math.PI / 2),
-				new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false }));
-			mesh.renderOrder = 9; scene.add(mesh);
+				new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+			mesh.renderOrder = 1; scene.add(mesh);
 			st = { mesh, cv, tex, sig: '', n }; tokStrips.set(u.id, st);
 		}
 		if (st.sig !== sig) {
@@ -3282,7 +3479,7 @@ function updateTokenStrips() {
 			Promise.all(u.tokens.slice(0, 8).map((id, i) => drawTok(x, id, i * 138 + 9, 4, 120))).then(() => { if (st.sig === sig) st.tex.needsUpdate = true; });
 			st.tex.needsUpdate = true;
 		}
-		st.mesh.position.set(o.g.position.x, BASE_H + 0.05, o.g.position.z - radius(m) - TOK_SIZE / 2 - 0.12);
+		st.mesh.position.set(o.g.position.x, TOK_H + 0.004, o.g.position.z - radius(m) - TOK_SIZE / 2 - 0.12);
 	}
 	for (const [id, st] of tokStrips) if (!live.has(id)) { scene.remove(st.mesh); st.mesh.geometry.dispose(); st.mesh.material.dispose(); st.tex.dispose(); tokStrips.delete(id); }
 }
@@ -3449,6 +3646,12 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !tokPick.h
 // Each unit with a model there counts its supply once on that marker.
 const contestOf = new Map();   // model id -> the marker number it contests
 const isDead = m => !!(m.dmgH && healthOf(m).hp && healthOf(m).h === 0);
+// extra supply a unit counts for Mission Markers: Commander on its card, and a Supply Depot or Domineering Presence token
+function markerBonus(u) {
+	let b = (libCard(u.card)?.abilities || []).some(a => /^commander$/i.test(String(a?.name || '').trim())) ? 1 : 0;
+	for (const t of u.tokens || []) if (['depot', 'flag'].includes(String(t).split('@')[0])) b++;
+	return b;
+}
 function objectiveCounts() {
 	const out = new Map();
 	for (const [n, v] of markerViz) {
@@ -3458,24 +3661,28 @@ function objectiveCounts() {
 			const pos = objs.get(m.id)?.g.position || m;
 			if (Math.hypot(pos.x - v.px, pos.z - v.pz) - radius(m) - MARKER_R <= 3 + 1e-6) { units[m.player].add(m.unit); minis.push(m.id); }
 		}
-		const sup = units.map(set => [...set].reduce((a, id) => { const u = findUnit(id); return a + (u ? unitSupply(u) : 0); }, 0));
+		const sup = units.map(set => [...set].reduce((a, id) => { const u = findUnit(id); return a + (u ? unitSupply(u) + markerBonus(u) : 0); }, 0));
 		out.set(n, { sup, minis, here: units.map(set => set.size > 0) });
 	}
 	return out;
 }
 // Control changes only when one side has more supply on a marker than the other; a tie or an empty marker keeps it.
 // A control set by hand stays until a side newly gets more supply there.
+// Determine Mission Marker Control: the side with more supply on a marker takes it; a tie or an empty marker keeps it
+function decideObjectives() {
+	const counts = objectiveCounts(), out = [];
+	for (const [n, k] of counts) {
+		const lead = k.sup[0] > k.sup[1] ? 0 : k.sup[1] > k.sup[0] ? 1 : null, o = state.ctl[n] || { c: null, l: null };
+		if (lead !== null && o.c !== lead) out.push(`${esc(state.players[lead].name)} takes Mission Marker ${n}`);
+		state.ctl[n] = { c: lead ?? o.c, l: lead };
+	}
+	objSig = '';
+	return out;
+}
 function updateObjectives() {
 	if (!markerViz.size && !contestOf.size) return;
-	const counts = objectiveCounts(), settled = !drag && !moves.size;
-	let ctlChanged = false;
-	if (settled) for (const [n, k] of counts) {
-		const lead = k.sup[0] > k.sup[1] ? 0 : k.sup[1] > k.sup[0] ? 1 : null, o = state.ctl[n] || { c: null, l: null };
-		if (lead !== o.l) {
-			if (lead !== null && o.c !== lead) { o.c = lead; toast(`${esc(state.players[lead].name)} takes control of Mission Marker ${n}`); }
-			o.l = lead; state.ctl[n] = o; ctlChanged = true;
-		}
-	}
+	const counts = objectiveCounts();
+	const ctlChanged = false;
 	const sig = JSON.stringify([...counts].map(([n, k]) => [n, k.sup, k.here, k.minis, state.ctl[n]?.c ?? null])) + state.players.map(p => p.color).join();
 	if (ctlChanged) save();
 	if (sig === objSig) return;
@@ -3506,6 +3713,7 @@ function animate() {
 	if (pings.length) updatePings(performance.now());
 	controls.update();
 	if (net.code) drawRemote();
+	if (multi.size > 1 || !$('#atkPanel').hidden) renderAtkPanel();
 	updateDistances();
 	updateLabels();
 	updateConfirm();
@@ -3703,7 +3911,8 @@ function renderReserves() {
 		// supply waiting in reserves: shown here, not counted in the supply on the table at the top.
 		// A unit with models both on the table and in reserves already counts on the table, so it is left out here.
 		const resSup = order.map(findUnit).filter(u => u && !state.minis.some(m => m.unit === u.id && !m.reserve)).reduce((s, u) => s + unitSupply(u), 0);
-		box.innerHTML = `<div class="rhead"><b>Reserves</b> <span class="note">${esc(state.players[i].name)} · ${ms.length ? `${plural(order.length, 'unit')}, ${plural(ms.length, 'model')} · ${resSup} sup` : 'empty'}</span></div>
+		box.classList.toggle('empty', !ms.length);
+		box.innerHTML = `<div class="rhead"><b>Reserves</b> <span class="note">${ms.length ? `${esc(state.players[i].name)} · ${plural(order.length, 'unit')}, ${plural(ms.length, 'model')} · ${resSup} sup` : `${esc(state.players[i].name)} · 0`}</span></div>
 			<div class="rbody">${ms.length ? order.map(uid => {
 				const um = ms.filter(m => m.unit === uid), u = findUnit(uid) || { name: baseName(um[0].name), supply: 0 };
 				return `<div class="runit"><div class="ruh" data-drag-unit="${uid}" data-p="${i}" title="Drag the whole unit onto the table">⠿ <b>${esc(u.name)}</b><span class="mm">${um.length}× · ${u.id ? unitSupply(u) : u.supply} sup</span></div>
@@ -3721,7 +3930,7 @@ boardEl.addEventListener('pointerdown', e => {
 	e.preventDefault();
 	const ids = t.dataset.dragMini ? [t.dataset.dragMini] : state.minis.filter(m => m.reserve && m.unit === t.dataset.dragUnit).map(m => m.id);
 	if (!ids.length) return;
-	rdrag = { ids, box: t.closest('.reserve') };
+	rdrag = { ids, box: t.closest('.reserve'), x: e.clientX, y: e.clientY, unit: t.dataset.dragUnit || null };
 	rdrag.box.classList.add('dragging');
 	ghostEl.innerHTML = thumbHtml(findMini(ids[0])) + (ids.length > 1 ? `<b>×${ids.length}</b>` : '');
 	ghostEl.hidden = false;
@@ -3734,7 +3943,8 @@ function dropReserve(e) {
 	window.removeEventListener('pointermove', moveGhost);
 	ghostEl.hidden = true;
 	rdrag?.box.classList.remove('dragging');
-	const ids = rdrag?.ids; rdrag = null;
+	const ids = rdrag?.ids, click = rdrag && Math.hypot(e.clientX - rdrag.x, e.clientY - rdrag.y) < 5; rdrag = null;
+	if (click && ids?.length) { if (ids.length > 1) selectMany(ids); else select('mini', ids[0]); return; }
 	// deploy only when let go over the table itself
 	if (ids && document.elementFromPoint(e.clientX, e.clientY) === el) deployModels(ids, tablePoint(e));
 }
@@ -3933,13 +4143,17 @@ $('#listAdd').addEventListener('click', () => {
 	const ids = [];
 	for (const u of plan) {
 		const unit = newId('u');
-		state.units.push(normUnit({ id: unit, name: u.name, player, supply: u.supply, card: u.card?.id || null, upgrades: u.upgrades }));
+		state.units.push(normUnit({ id: unit, name: u.name, player, supply: u.supply, card: u.card?.id || null, upgrades: u.upgrades, listed: true }));
 		let n = 0;
+		const made = [];
 		for (const mt of u.models) for (let i = 0; i < mt.count; i++) {
 			const c = mt.card || u.card, baseMm = c?.baseMm || 32;
-			const m = { id: newId('m'), name: (u.total > 1 ? `${mt.name} ${++n}` : mt.name).slice(0, 40), player, baseMm, img: c?.portrait || null, x: 0, z: 0, unit, reserve: true };
-			state.minis.push(m); addMiniObj(m); ids.push(m.id);
+			const m = { id: newId('m'), name: (u.total > 1 ? `${mt.name} ${++n}` : mt.name).slice(0, 40), player, baseMm, img: c?.portrait || null, x: 0, z: 0, unit, reserve: true, spec: null };
+			made.push(m);
 		}
+		const specs = (u.card?.weapons || []).filter(w => w?.upgrade && /SPECIALIST/i.test(w.keywords || '') && u.upgrades.some(x => cardKey(x) === cardKey(w.name)));
+		specs.forEach((w, k) => { const m = made[made.length - 1 - k]; if (m && made.length > 1) { m.spec = w.name.slice(0, 40); m.name = `${m.name} (${w.name})`.slice(0, 40); } });
+		for (const m of made) { state.minis.push(m); addMiniObj(m); ids.push(m.id); }
 	}
 	// the list's Faction and Tactical cards replace this player's cards in the tracker
 	if (list.cards.length) {
@@ -3975,13 +4189,67 @@ $('#terrainForm').addEventListener('submit', e => {
 	addTerrainPiece({ name: 'Terrain', shape: $('#terShape').value, cls: $('#terCls').value, w: clampN($('#terW').value, 0.5, 48, 6), d: clampN($('#terD').value, 0.5, 48, 4), h: clampN($('#terH').value, 0.05, 24, 3) });
 });
 
-// tabs
-document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
-	document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b));
-	$('#tab-units').hidden = b.dataset.tab !== 'units';
-	$('#tab-table').hidden = b.dataset.tab !== 'table';
-	try { localStorage.setItem(STORE_KEY + '-tab', b.dataset.tab); } catch { }
-}));
+// stage of the game: Setup shows the numbered steps; Play keeps the units on the table, with cards and rules, on the
+// left (they sit under the selected model on the right during setup). Remembered in this browser.
+function setStage(st, quiet) {
+	const play = st === 'play';
+	document.body.classList.toggle('stage-play', play);
+	document.body.classList.toggle('stage-setup', !play);
+	$('#stageSetup').setAttribute('aria-pressed', String(!play));
+	$('#stagePlay').setAttribute('aria-pressed', String(play));
+	const into = play ? $('#leftRef') : $('.panel.right');
+	for (const id of ['#refNote', '#cardsBox', '#rulesBox']) into.appendChild($(id));
+	try { localStorage.setItem(STORE_KEY + '-stage', play ? 'play' : 'setup'); } catch { }
+	if (!quiet && play) toast('Play: units, cards and rules on the left. Setup is one click away at the top.');
+}
+$('#stageSetup').addEventListener('click', () => setStage('setup'));
+$('#stagePlay').addEventListener('click', () => setStage('play'));
+$('#startHere').addEventListener('click', () => setStage('play'));
+// online play in a dialog, opened from the header; the header button shows the game while connected
+function openOnline() { $('#onlineDlg').hidden = false; ($('#netCreate').offsetParent ? $('#netCreate') : $('#onlineClose')).focus(); }
+function closeOnline() { $('#onlineDlg').hidden = true; }
+$('#onlineBtn').addEventListener('click', openOnline);
+$('#startOnline').addEventListener('click', openOnline);
+$('#onlineClose').addEventListener('click', closeOnline);
+$('#onlineDlg').addEventListener('pointerdown', e => { if (e.target === $('#onlineDlg')) closeOnline(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#onlineDlg').hidden) { closeOnline(); e.stopPropagation(); } }, true);
+// the side panels fold away to give the board room: the buttons on the board's edges, or [ and ]
+function toggleSide(side, force) {
+	const app = $('.app'), cls = side === 'left' ? 'hide-left' : 'hide-right', on = force ?? !app.classList.contains(cls);
+	app.classList.toggle(cls, on);
+	const b = side === 'left' ? $('#togLeft') : $('#togRight');
+	b.textContent = (side === 'left') === on ? '›' : '‹';
+	const what = on ? 'Show' : 'Hide';
+	b.title = `${what} the ${side} panel ( ${side === 'left' ? '[' : ']'} )`; b.setAttribute('aria-label', `${what} the ${side} panel`);
+	try { localStorage.setItem(STORE_KEY + '-' + cls, on ? '1' : ''); } catch { }
+}
+$('#togLeft').addEventListener('click', () => toggleSide('left'));
+$('#togRight').addEventListener('click', () => toggleSide('right'));
+document.addEventListener('keydown', e => {
+	if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+	if (e.key === '[') toggleSide('left'); else if (e.key === ']') toggleSide('right');
+});
+// help: the controls and shortcuts in one place
+$('#helpBtn').addEventListener('click', () => openViewer('How to use the table', `<div class="md">
+	<h4>Getting started</h4>
+	<ol><li><b>Setup</b> (top left): pick the table and deployment, import both armies (or the rulebook's examples), place terrain.</li>
+	<li>Drag units from the <b>Reserves</b> tabs onto the table. Press <b>Play</b> when you are ready, or <b>Play online</b> to invite someone.</li></ol>
+	<h4>Moving</h4>
+	<ul><li>Drag a base: its unit follows in coherency (<b>Alt</b>+drag moves it alone). Drag again to add a leg.</li>
+	<li><b>Enter</b> confirms a move, <b>Shift+Enter</b> confirms all, <b>Esc</b> cancels, <b>Backspace</b> drops the last leg.</li>
+	<li>A red edge means a base is off the table or on another base. Hold <b>Ctrl</b> while dragging to keep it clear of both.</li></ul>
+	<h4>Selecting and attacking</h4>
+	<ul><li><b>Shift</b>+click or <b>Shift</b>+drag selects several models. Select your unit, then <b>Ctrl</b>+click an enemy: its weapons show above the table and in the dice box.</li>
+	<li>Click a model in Reserves to see its card.</li></ul>
+	<h4>Right-click</h4>
+	<ul><li>A model: activation tokens (Movement, Assault), tokens, a glow on that model, reserves, Blast Template.</li>
+	<li>A Mission Marker: set control by hand. An empty spot: place a faction token or a Blast Template.</li></ul>
+	<h4>Rounds</h4>
+	<ul><li><b>End round</b> (top) decides who controls each Mission Marker, then starts the next round: tactical cards are readied and end-of-round tokens removed.</li></ul>
+	<h4>Keys</h4>
+	<ul><li><b>V</b> move · <b>R</b> ruler · <b>F</b> fit table · <b>G</b> grid · <b>Q</b>/<b>E</b> turn terrain · <b>Ctrl+Z</b> undo · <b>[</b> and <b>]</b> fold the side panels · <b>Space</b> switches the clock</li>
+	<li>Drag the table to pan, scroll to zoom, double-click to ping a spot.</li></ul>
+	<p class="note">Created by Johan Dyrlind with Claude Code.</p></div>`));
 
 // table settings
 $('#sizePresets').innerHTML = TABLE_PRESETS.map(([w, d, l]) => `<button class="btn" type="button" data-w="${w}" data-d="${d}">${l}</button>`).join('');
@@ -4208,9 +4476,55 @@ function surgeMatches(w, c) {
 	const tags = new Set((c?.combatTags || []).map(tagKey));
 	return String(w?.surgeType || '').split(',').map(tagKey).some(t => t && t !== '-' && tags.has(t));
 }
+// closest distance between two units' bases, from where they are shown
+function unitGap(ua, ub) {
+	let best = Infinity;
+	const A = state.minis.filter(m => m.unit === ua.id && !m.reserve && !isDead(m)), B = state.minis.filter(m => m.unit === ub.id && !m.reserve && !isDead(m));
+	for (const a of A) { const pa = shownAt(a); for (const b of B) { const pb = shownAt(b); best = Math.min(best, Math.hypot(pa.x - pb.x, pa.z - pb.z) - radius(a) - radius(b)); } }
+	return Math.max(0, best);
+}
+let atkSig = '';
+function renderAtkPanel() {
+	const pr = attackPair(), el = $('#atkPanel');
+	const uw = pr && pr.ac ? { u: pr.au, plan: weaponPlan(pr.au, pr.ac) } : null;
+	if (!pr || !uw?.plan.length) { if (!el.hidden) { el.hidden = true; atkSig = ''; } return; }
+	const gap = unitGap(pr.au, pr.bu), bc = pr.bc, tags = new Set((bc?.combatTags || []).map(tagKey));
+	const picked = dice.kind === 'hit' ? $('#diceWeapon').value : '';
+	const sig = JSON.stringify([pr.au.id, pr.bu.id, gap.toFixed(2), uw.plan.map(x => x.n), picked, state.unit]);
+	if (sig === atkSig && !el.hidden) return;
+	atkSig = sig;
+	const P = state.players, has = v => v && v !== '-' && v !== 'null';
+	const st = bc?.stats || {}, hp = pr.bu ? statsOf(pr.bu.id) : { hp: 0, sh: 0 };
+	const def = bc ? `Armour ${esc(st.armour || '–')} · Evade ${esc(st.evade || '–')} · Health ${hp.hp || '–'}${hp.sh ? ' · Shield ' + hp.sh : ''}${bc.combatTags?.length ? ' · ' + esc(bc.combatTags.join(', ')) : ''}` : 'no card for the target';
+	const rows = uw.plan.map((x, k) => {
+		const w = x.w, rg = String(w.range || '').trim(), num = /^\d+(\.\d+)?$/.test(rg) ? +rg : null, lr = /LONG RANGE\s*\((\d+)/i.exec(w.keywords || '');
+		let why = '';
+		if (/^E$/i.test(rg)) { if (gap > 1 + 1e-6) why = 'not engaged'; }
+		else if (num != null && gap > num + 1e-6) why = lr && gap <= +lr[1] + 1e-6 ? '' : 'out of range';
+		const longR = num != null && gap > num + 1e-6 && lr && gap <= +lr[1] + 1e-6;
+		const tg = String(w.target || '').trim().toLowerCase();
+		if (!why && tg && tg !== 'all' && tags.size && !tags.has(tagKey(tg))) why = `targets ${esc(w.target)} only`;
+		if (!why && !x.n) why = 'no model carries it';
+		return `<tr class="w${why ? ' out' : ''}" data-k="${k}" aria-selected="${picked === String(k)}" title="Use this weapon for the dice">
+			<td><b>${esc(w.name)}</b>${w.upgrade ? ' <span class="def">upgrade</span>' : ''}${why ? `<div class="why">${why}</div>` : longR ? '<div class="why">long range: −1 to Hit</div>' : ''}</td>
+			<td>${esc(w.phase || '')}</td><td>${esc(rg === 'E' ? 'Engaged' : rg ? rg + '″' : '–')}</td><td>${esc(w.target || '–')}</td>
+			<td>${esc(w.roa)}×${x.n}</td><td>${esc(w.hit || '–')}</td><td>${has(w.surgeType) ? esc(w.surgeType) + ' ' + esc(w.surgeDice || '') : '–'}</td><td>${esc(w.damage || '–')}</td>
+			<td class="kw">${has(w.keywords) ? esc(w.keywords) : ''}</td></tr>`;
+	}).join('');
+	el.innerHTML = `<div class="ahead"><span class="swatch" style="background:${P[pr.a.player].color}"></span><b>${esc(pr.au.name)}</b> → <span class="swatch" style="background:${P[pr.b.player].color}"></span><b>${esc(pr.bu.name)}</b>
+		<span class="def">${fmt(gap)} apart · ${def}</span></div>
+		<table><thead><tr><th>Weapon</th><th>Phase</th><th>Range</th><th>Target</th><th>RoA</th><th>Hit</th><th>Surge</th><th>Dmg</th><th>Keywords</th></tr></thead><tbody>${rows}</tbody></table>`;
+	el.hidden = false;
+}
+$('#atkPanel').addEventListener('click', e => {
+	const tr = e.target.closest('tr[data-k]'); if (!tr) return;
+	if (dice.kind !== 'hit') setKind('hit');
+	$('#diceWeapon').value = tr.dataset.k; markWeapon(); applyWeapon(); atkSig = ''; renderAtkPanel();
+});
 function renderAttack() {
 	const pr = attackPair(), P = state.players;
 	$('#attackRow').hidden = !pr;
+	atkSig = ''; renderAtkPanel();
 	if (!pr) return;
 	const who = (m, u) => `<span class="swatch" style="background:${P[m.player].color};display:inline-block"></span> <b>${esc(u.name)}</b>`;
 	$('#attackRow').innerHTML = `<span>Attack: ${who(pr.a, pr.au)} → ${who(pr.b, pr.bu)}${pr.bc?.combatTags?.length ? ` <span>(${esc(pr.bc.combatTags.join(', '))})</span>` : ''}</span>`;
@@ -4239,32 +4553,59 @@ function unitWeapons() {
 	const sc = selectedCard();
 	if (!sc?.c || !Array.isArray(sc.c.weapons)) return null;
 	const u = findUnit(sc.m.unit);
-	return u ? { u, c: sc.c, ws: sc.c.weapons.filter(w => w && w.name) } : null;
+	if (!u) return null;
+	const ws = weaponPlan(u, sc.c);
+	return { u, c: sc.c, ws: ws.map(x => x.w), plan: ws };
 }
+// the weapons a unit uses, each with how many of its models still carry it (n)
+function weaponPlan(u, c) {
+	const all = (c?.weapons || []).filter(w => w && w.name), alive = aliveModels(u).filter(m => !m.tok);
+	const listed = u.listed || u.upgrades.length > 0, bought = new Set(u.upgrades.map(cardKey));
+	const isSpec = w => /SPECIALIST/i.test(w.keywords || ''), isSide = w => /SIDEARM/i.test(w.keywords || '');
+	const tagged = state.minis.some(m => m.unit === u.id && m.spec);
+	const carriers = w => tagged ? alive.filter(m => m.spec && cardKey(m.spec) === cardKey(w.name)).length : alive.length ? 1 : 0;
+	const has = w => !w.upgrade || !listed || bought.has(cardKey(w.name));
+	const out = [];
+	all.forEach((w, i) => {
+		if (!has(w)) return;
+		// replaced on every model by an upgrade that is not SPECIALIST
+		if (!w.upgrade && listed && all.some(x => x.upgrade && !isSpec(x) && bought.has(cardKey(x.name)) && x.replaces && cardKey(x.replaces) === cardKey(w.name))) return;
+		let n;
+		if (w.upgrade && isSpec(w)) n = carriers(w);
+		else {
+			// SPECIALIST upgrades that replace this weapon take their models out of its count; a SIDEARM does not
+			const off = all.filter(x => x.upgrade && isSpec(x) && !isSide(x) && has(x) && listed && x.replaces && cardKey(x.replaces) === cardKey(w.name)).reduce((a, x) => a + carriers(x), 0);
+			n = Math.max(0, alive.length - off);
+		}
+		out.push({ w, i, n });
+	});
+	return out;
+}
+const roaOf = w => { const ra = String(w.roa).trim(), bt = /^BT\s*\+\s*(\d+)$/i.exec(ra); return /^\d+$/.test(ra) ? +ra : bt ? 1 + +bt[1] : null; };
 function renderWeapons(force) {
 	const uw = unitWeapons();
 	$('#weaponRow').hidden = dice.kind !== 'hit' || !uw?.ws.length;
 	if (!uw?.ws.length) { weaponSig = ''; return; }
 	if (dice.kind !== 'hit') return;
-	const alive = aliveModels(uw.u).length || 1, sig = uw.u.id + '|' + uw.c.id + '|' + alive + '|' + (attackPair()?.bu.id || '');
+	const counts = uw.plan.map(x => x.n).join(','), sig = uw.u.id + '|' + uw.c.id + '|' + counts + '|' + uw.u.upgrades.join(',') + '|' + (attackPair()?.bu.id || '');
 	if (sig === weaponSig && !force) return;
 	const keep = weaponSig.split('|')[0] === uw.u.id ? $('#diceWeapon').value : null;
 	weaponSig = sig;
 	const has = v => v && v !== '-';
-	$('#diceWeapon').innerHTML = uw.ws.map((w, i) => `<option value="${i}">${esc(w.name)} · ${esc(w.phase || '')} · RoA ${esc(w.roa)} × ${alive} · ${esc(w.hit)}`
+	$('#diceWeapon').innerHTML = uw.ws.map((w, i) => `<option value="${i}">${esc(w.name)} · ${esc(w.phase || '')} · RoA ${esc(w.roa)} × ${uw.plan[i].n} · ${esc(w.hit)}`
 		+ `${has(w.surgeDice) ? ' · surge ' + esc(w.surgeDice) : ''}${w.upgrade ? ' (upgrade)' : ''}</option>`).join('') + '<option value="">By hand</option>';
 	$('#diceWeapon').value = keep !== null && $('#diceWeapon').querySelector(`option[value="${keep}"]`) ? keep : '0';
 	$('#weaponPick').innerHTML = uw.ws.map((w, i) => `<button type="button" data-w="${i}" title="${esc(w.name)}${w.phase ? ' · ' + esc(w.phase) : ''}${has(w.keywords) ? ' · ' + esc(w.keywords) : ''}"><b>${esc(w.name)}</b>`
-		+ `<small>${esc(w.phase || '')} · RoA ${esc(w.roa)}×${alive} · ${esc(w.hit)}${has(w.surgeDice) ? ' · ' + esc(w.surgeDice) : ''}${w.upgrade ? ' · upgrade' : ''}</small></button>`).join('')
+		+ `<small>${esc(w.phase || '')} · RoA ${esc(w.roa)}×${uw.plan[i].n} · ${esc(w.hit)}${has(w.surgeDice) ? ' · ' + esc(w.surgeDice) : ''}${w.upgrade ? ' · upgrade' : ''}</small></button>`).join('')
 		+ '<button type="button" data-w=""><b>By hand</b><small>set the dice yourself</small></button>';
 	markWeapon();
 	applyWeapon();
 }
 function applyWeapon() {
-	const uw = unitWeapons(), w = uw?.ws[+$('#diceWeapon').value];
+	const uw = unitWeapons(), k = +$('#diceWeapon').value, w = uw?.ws[k];
 	if (!w || $('#diceWeapon').value === '') return;
-	const ra = String(w.roa).trim(), bt = /^BT\s*\+\s*(\d+)$/i.exec(ra), roa = /^\d+$/.test(ra) ? +ra : bt ? 1 + +bt[1] : null, hit = /(\d)\+?/.exec(String(w.hit || ''));
-	if (roa) $('#diceCount').value = Math.min(60, roa * (aliveModels(uw.u).length || 1));
+	const roa = roaOf(w), hit = /(\d)\+?/.exec(String(w.hit || ''));
+	if (roa) $('#diceCount').value = Math.max(1, Math.min(60, roa * uw.plan[k].n));
 	if (hit) $('#diceTarget').value = String(Math.min(6, Math.max(2, +hit[1])));
 	const sd = String(w.surgeDice || '').trim();
 	dice.surge = !w.surgeType || w.surgeType === '-' ? '' : ['D3', 'D3+1', 'D6'].includes(sd) ? sd : /^BT$/i.test(sd) ? 'fixed' : '';
@@ -4455,6 +4796,7 @@ $('#clockMin').addEventListener('change', e => {
 armed($('#clockReset'), () => { const b = state.clock.base; state.clock = normClock({ base: b }); renderClock(); save(); toast(`Clocks reset to ${b}:00 each`); }, 'Confirm?');
 
 function renderScore() {
+	for (const i of [0, 1]) $('#pblock' + i)?.style.setProperty('--pc', state.players[i].color);
 	renderClock();   // names and colours
 	for (const i of [0, 1]) {
 		const b = $('#score' + i), p = state.players[i], t = scoreTotal(i);
@@ -4521,14 +4863,41 @@ scorePop.addEventListener('click', e => {
 	else state.score[c][i][r] = Math.max(0, Math.min(99, state.score[c][i][r] + +b.dataset.d));
 	renderScore(); save();
 });
+const ROUND_TOKS = new Set(['actmove', 'actassault', 'stationary', 'guardian', 'feedback', 'farsight', 'khala', 'nerazim', 'stim', 'retreat', 'orders', 'flare', 'seeker', 'spotter', 'comsat', 'mutation', 'brood1', 'brood2', 'brood3']);
+const roundTok = id => { const b = String(id).split('@')[0]; return ROUND_TOKS.has(b) || b.startsWith('txt:'); };
+function clearRoundTokens() {
+	let n = 0;
+	for (const u of state.units) {
+		const keep = (u.tokens || []).filter(t => !roundTok(t));
+		if (keep.length !== (u.tokens || []).length) { n += u.tokens.length - keep.length; u.tokens = keep; }
+	}
+	const gone = state.minis.filter(m => m.tok && roundTok(m.tok));
+	for (const m of gone) { removeObj(m.id); n++; }
+	if (gone.length) { const ids = new Set(gone.map(m => m.id)); state.minis = state.minis.filter(m => !ids.has(m.id)); if (sel && ids.has(sel.id)) select(null); }
+	if (n) { renderLists(); renderCard(); save(); }
+	return n;
+}
 function setCounter(key, v, lo, hi) { state.score[key] = Math.max(lo, Math.min(hi, v)); renderScore(); save(); }
+$('#endRound').addEventListener('click', () => {
+	const taken = decideObjectives(), r = state.score.round;
+	save();
+	const head = `End of round ${r}: ${taken.length ? taken.join(', ') : 'no Mission Marker changes hands'}. `;
+	if (r < 9) { setCounter('round', r + 1, 1, 9); newRoundCleanup(head); } else toast(head);
+});
 $('#roundMinus').addEventListener('click', () => setCounter('round', state.score.round - 1, 1, 9));
 $('#roundPlus').addEventListener('click', () => {
 	const before = state.score.round;
 	setCounter('round', before + 1, 1, 9);
-	// a new round follows Cleanup, which readies every exhausted card
-	if (state.score.round > before && state.tactics.some(t => t.used)) { state.tactics.forEach(t => { t.used = false; }); renderTactics(); save(); toast(`Round ${state.score.round}: all tactical cards readied`); }
+	if (state.score.round > before) newRoundCleanup();
 });
+// a new round follows Cleanup: exhausted cards are readied and tokens that last until the End of the Round go
+function newRoundCleanup(head = '') {
+	const msg = [];
+	if (state.tactics.some(t => t.used)) { state.tactics.forEach(t => { t.used = false; }); renderTactics(); save(); msg.push('all tactical cards readied'); }
+	const n = clearRoundTokens();
+	if (n) msg.push(`${n} end-of-round token${n === 1 ? '' : 's'} removed`);
+	if (msg.length || head) toast(`${head}Round ${state.score.round}${msg.length ? ': ' + msg.join(', ') : ' begins'}`);
+}
 $('#availMinus').addEventListener('click', () => setCounter('avail', state.score.avail - 1, 0, 99));
 $('#availPlus').addEventListener('click', () => setCounter('avail', state.score.avail + 1, 0, 99));
 
@@ -4741,6 +5110,7 @@ function renderTactics() {
 		box.style.setProperty('--pc', state.players[i].color);
 		box.innerHTML = tacticsHtml(i);
 		box.classList.toggle('adding', tacAdding.has(i));
+		box.classList.toggle('empty', !state.tactics.some(t => t.player === i));
 	});
 }
 function tacticsHtml(i) {
@@ -4749,12 +5119,12 @@ function tacticsHtml(i) {
 		for (const t of ts) { all[t.res] = (all[t.res] || 0) + t.value; if (!t.used) left[t.res] = (left[t.res] || 0) + t.value; }
 		const res = Object.keys(all).map(r => `<span class="resv" title="${r} available from Ready cards, of ${all[r]}"><b>${left[r] || 0}</b>/${all[r]} ${r}</span>`).join(' ');
 		return `<div class="tacp">
-			<div class="thead"><span><b>Tactical cards</b> <span class="note">${esc(state.players[i].name)}</span></span><span>${res}<button class="x" data-addopen="${i}" aria-expanded="${tacAdding.has(i)}" title="${tacAdding.has(i) ? 'Close' : 'Add a card, or ready them all'}">${tacAdding.has(i) ? '−' : '+'}</button></span></div>
+			<div class="thead"><span><b>${ts.length ? 'Tactical cards' : 'Cards'}</b> <span class="note">${esc(state.players[i].name)}${ts.length ? '' : ' · 0'}</span></span><span>${res}<button class="x" data-addopen="${i}" aria-expanded="${tacAdding.has(i)}" title="${tacAdding.has(i) ? 'Close' : 'Add a card, or ready them all'}">${tacAdding.has(i) ? '−' : '+'}</button></span></div>
 			<ul class="ulist">${ts.map(t => `<li class="${t.used ? 'used' : ''}">
 				<button class="tacbtn" data-toggle="${t.id}" aria-pressed="${!t.used}" title="${t.used ? 'Used: click to ready it' : 'Ready: click to exhaust it'}">${t.used ? 'Used' : 'Ready'}</button>
 				<span class="nm">${esc(t.name)}</span><span class="mm">${t.value} ${t.res}</span>
 				${t.card && libCard(t.card) ? `<button class="x" data-open="${t.card}" title="Open the card" aria-label="Open ${esc(t.name)}">⧉</button>` : ''}
-				<button class="x" data-del="${t.id}" aria-label="Remove ${esc(t.name)}">✕</button></li>`).join('') || '<li class="note">No cards yet. Import an army list, or add one with +.</li>'}</ul>
+				<button class="x" data-del="${t.id}" aria-label="Remove ${esc(t.name)}">✕</button></li>`).join('')}</ul>
 			<div class="row tadd">
 				${LIB ? `<select data-addsel="${i}" aria-label="Card to add" style="flex:1;min-width:0">${tacticalOptions()}</select>` : `<input type="text" data-addname="${i}" placeholder="Card name" aria-label="Card name" style="flex:1;min-width:0">`}
 				<button class="btn" data-add="${i}">Add</button>
@@ -4911,9 +5281,9 @@ const piecesCol = () => net.db.collection('games/' + net.code + '/pieces');
 const rollsCol = () => net.db.collection('games/' + net.code + '/rolls');
 function pieceDoc(it, kind) {
 	if (kind === 'tac') return { kind, player: it.player, name: it.name, card: it.card, res: it.res, value: it.value, used: it.used };
-	if (kind === 'unit') return { kind, name: it.name, player: it.player, supply: it.supply, card: it.card, upgrades: it.upgrades, coh: it.coh, glow: it.glow ?? null, hp: it.hp ?? null, sh: it.sh ?? null, tokens: it.tokens || [] };
+	if (kind === 'unit') return { kind, name: it.name, player: it.player, supply: it.supply, card: it.card, upgrades: it.upgrades, listed: !!it.listed, coh: it.coh, glow: it.glow ?? null, hp: it.hp ?? null, sh: it.sh ?? null, tokens: it.tokens || [] };
 	return kind === 'mini'
-		? { kind, name: it.name, player: it.player, baseMm: it.baseMm, img: it.img, x: r3(it.x), z: r3(it.z), unit: it.unit, reserve: it.reserve, dmgH: it.dmgH || 0, dmgS: it.dmgS || 0, tok: it.tok || null }
+		? { kind, name: it.name, player: it.player, baseMm: it.baseMm, img: it.img, x: r3(it.x), z: r3(it.z), unit: it.unit, reserve: it.reserve, dmgH: it.dmgH || 0, dmgS: it.dmgS || 0, tok: it.tok || null, spec: it.spec || null, glow: it.glow || null }
 		: { kind, w: it.w, d: it.d, h: it.h, x: r3(it.x), z: r3(it.z), rot: r3(it.rot), name: it.name, shape: it.shape, cls: it.cls };
 }
 function metaDoc(s) { return { table: { w: s.table.w, d: s.table.d, mat: s.table.mat, deploy: s.table.deploy, lockTerrain: s.table.lockTerrain }, players: s.players.map(p => ({ name: p.name, color: p.color })), score: { round: s.score.round, sd: s.score.sd, ms: s.score.ms, avail: s.score.avail, kills: s.score.kills }, ctl: s.ctl, clock: s.clock }; }
@@ -5116,7 +5486,9 @@ function applyRemotePiece(id, b) {
 	}
 	if (ex) {
 		const rebuild = ex.baseMm !== item.baseMm || ex.reserve !== item.reserve || !objs.get(id), face = ex.img !== item.img || ex.name !== item.name || ex.player !== item.player || ex.dmgH !== item.dmgH || ex.dmgS !== item.dmgS || ex.tok !== item.tok;
+		const glowed = ex.glow !== item.glow;
 		Object.assign(ex, item);
+		if (glowed) refreshGlow(objs.get(id));
 		if (rebuild) rebuildMini(ex);   // also brings a model onto the table from reserves, or takes it off
 		else { objs.get(id)?.g.position.set(ex.x, 0, ex.z); if (face) refreshFace(objs.get(id)); }
 	} else { state.minis.push(item); addMiniObj(item); }
@@ -5170,7 +5542,11 @@ function sendMoves() {
 		const m = findMini(mv.id);
 		return m && { id: mv.id, x: r3(m.x), z: r3(m.z), pts: mv.points.slice(-10).map(p => [r3(p.x), r3(p.z)]), ...(mv.points.length > 10 ? { from: [r3(mv.points[0].x), r3(mv.points[0].z)] } : {}) };
 	}).filter(Boolean);
-	net.nroom.presence({ moves: list, drag: null }).catch(() => { });
+	const now = Date.now();
+	for (const [id, d] of recentDone) if (now - d.t > 5000) recentDone.delete(id);
+	const done = [...recentDone].slice(-30).map(([id, d]) => ({ id, x: d.x, z: d.z, t: d.t }));
+	net.nroom.presence({ moves: list, done, drag: null }).catch(() => { });
+	if (done.length) { clearTimeout(sendMoves.timer); sendMoves.timer = setTimeout(sendMoves, 5200); }   // the note is taken back again
 }
 function remoteDragsFrom(peers) {
 	const out = new Map();
@@ -5183,21 +5559,40 @@ function remoteDragsFrom(peers) {
 			const f = Array.isArray(d.from) && Number.isFinite(d.from[0]) && Number.isFinite(d.from[1]) ? { x: d.from[0], z: d.from[1] } : pts[0] || null;
 			out.set(d.id, { x: clampN(d.x, -100, 100, 0), z: clampN(d.z, -100, 100, 0), pts, seat: p.presence?.seat, from: f });
 		}
+		// moves just confirmed there: shown at their new spot until the saved position arrives (3 s at most)
+		for (const d of Array.isArray(p.presence?.done) ? p.presence.done.slice(0, 30) : []) {
+			if (!d || typeof d.id !== 'string' || !Number.isFinite(d.x) || !Number.isFinite(d.z)) continue;
+			const key = `${d.id}@${d.x},${d.z},${d.t}`;
+			if (landSeen.has(key)) continue;
+			landSeen.add(key); if (landSeen.size > 300) landSeen.delete(landSeen.values().next().value);
+			const m = findMini(d.id);
+			if (m && Math.hypot(m.x - d.x, m.z - d.z) > 0.02) landing.set(d.id, { x: clampN(d.x, -100, 100, 0), z: clampN(d.z, -100, 100, 0), until: performance.now() + 3000 });
+		}
 	}
 	return out;
 }
 const remoteLines = [], remoteTags = [];
-let overridden = new Set();
 function drawRemote() {
-	const rd = net.rd || new Map();
-	for (const id of overridden) if (!rd.has(id)) { const m = findMini(id), o = objs.get(id); if (m && o && drag?.item !== m) o.g.position.set(m.x, 0, m.z); }
+	const rd = net.rd || new Map(), now = performance.now(), selId = sel?.kind === 'mini' ? sel.id : null;
+	let selMoved = false;
+	for (const [id, l] of landing) {
+		const m = findMini(id), o = objs.get(id);
+		if (!m || !o || now > l.until || Math.hypot(m.x - l.x, m.z - l.z) < 0.02 || drag?.item === m || moves.has(id) || rd.has(id)) {
+			landing.delete(id);
+			if (m && o && drag?.item !== m && !rd.has(id)) o.g.position.set(m.x, 0, m.z);
+			if (id === selId) selMoved = true;
+			continue;
+		}
+		o.g.position.set(l.x, 0, l.z); if (id === selId) selMoved = true;
+	}
+	for (const id of overridden) if (!rd.has(id) && !landing.has(id)) { const m = findMini(id), o = objs.get(id); if (m && o && drag?.item !== m) o.g.position.set(m.x, 0, m.z); if (id === selId) selMoved = true; }
 	overridden = new Set();
 	let li = 0, ti = 0;
 	for (const [id, d] of rd) {
 		const m = findMini(id), o = objs.get(id);
 		if (!m || !o || drag?.item === m || moves.has(id)) continue;
 		if (d.from && Math.hypot(m.x - d.from.x, m.z - d.from.z) > 0.02) continue;   // moved since: that preview is stale
-		o.g.position.set(d.x, 0, d.z); overridden.add(id);
+		o.g.position.set(d.x, 0, d.z); overridden.add(id); if (id === selId) selMoved = true;
 		const pts = [...d.pts, { x: d.x, z: d.z }];
 		const col = d.seat === 0 || d.seat === 1 ? state.players[d.seat].color : '#ffffff';
 		let total = 0;
@@ -5214,8 +5609,9 @@ function drawRemote() {
 	}
 	for (; li < remoteLines.length; li++) remoteLines[li].visible = false;
 	for (; ti < remoteTags.length; ti++) remoteTags[ti].on = false;
+	if (selMoved) syncRanges();
 }
-function clearRemote() { net.rd = new Map(); drawRemote(); }
+function clearRemote() { net.rd = new Map(); landing.clear(); drawRemote(); }
 
 function readSeat(code, def) { try { const v = localStorage.getItem(STORE_KEY + '-seat-' + code); if (v === '0' || v === '1' || v === '2') return +v; } catch { } return def; }
 function setSeat(s) {
@@ -5226,6 +5622,9 @@ function setSeat(s) {
 	renderOnline();
 }
 function renderOnline() {
+	const ob = $('#onlineBtn');
+	ob.textContent = net.code ? `● Online · ${net.code.toUpperCase()}` : 'Play online';
+	ob.classList.toggle('on', !!net.code);
 	$('#onlineChecking').hidden = net.checked;
 	$('#onlineNA').hidden = !net.checked || !!net.db;
 	$('#onlineOff').hidden = !net.checked || !net.db || !!net.code;
@@ -5287,7 +5686,12 @@ function start(hot) {
 	W = Math.max(1, viewportEl.clientWidth); H = Math.max(1, viewportEl.clientHeight);
 	renderer.setSize(W, H, false); setFrustum();
 	applyState(hot?.state || loadSaved() || exampleState());
-	try { const tab = localStorage.getItem(STORE_KEY + '-tab'); if (tab === 'table') $('#tabTableBtn').click(); } catch { }
+	try {
+		const st = localStorage.getItem(STORE_KEY + '-stage');
+		setStage(st || (state.example || !state.minis.some(m => !m.reserve) ? 'setup' : 'play'), true);
+		if (localStorage.getItem(STORE_KEY + '-hide-left')) toggleSide('left', true);
+		if (localStorage.getItem(STORE_KEY + '-hide-right')) toggleSide('right', true);
+	} catch { setStage('setup', true); }
 	initLibrary();
 	renderDice(); renderRoller(); renderOnline();
 	initNet();
