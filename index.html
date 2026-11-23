@@ -175,6 +175,21 @@ kbd { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); bor
 /* reserves: a small tab in the board's top-left (player 2) and bottom-left (player 1) corner, opening on hover */
 .reserve { --pc: var(--muted); position: absolute; left: 10px; z-index: 6; max-width: calc(100% - 20px); background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--pc); border-radius: 8px; font-size: 12.5px; box-shadow: 0 6px 20px rgb(0 0 0 / .4); }
 .reserve.r1 { top: 52px; }
+.tacwrap { position: absolute; right: 10px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; width: min(270px, calc(50% - 20px)); }
+.tacwrap.t1 { top: 52px; }
+.tacwrap.t0 { bottom: 62px; }
+.tacov { --pc: var(--muted); width: 100%; background: var(--panel); border: 1px solid var(--line); border-right: 3px solid var(--pc); border-radius: 8px; font-size: 12.5px; box-shadow: 0 6px 20px rgb(0 0 0 / .4); padding: 6px 8px; max-height: 38vh; overflow: auto; }
+.tacov .thead { display: flex; gap: 8px; align-items: center; justify-content: space-between; white-space: nowrap; }
+.tacov .thead b { font-family: var(--font-display); letter-spacing: .06em; text-transform: uppercase; font-size: 12px; }
+.tacov .ulist { margin: 4px 0 0; }
+.tacov .ulist li { padding: 2px 0; }
+.tacov .tadd { display: none; margin-top: 6px; flex-wrap: nowrap; }
+.tacov.adding .tadd { display: flex; }
+.tacov .thead .x { margin-left: 2px; }
+.tacinfo { position: relative; }
+.tacinfo .ii { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); color: var(--muted); font: italic 700 12px/1 Georgia, serif; cursor: help; }
+.tacinfo-tip { display: none; position: absolute; right: 0; bottom: calc(100% + 6px); width: min(260px, calc(100vw - 40px)); background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.45; box-shadow: 0 6px 20px rgb(0 0 0 / .4); }
+.tacinfo:hover .tacinfo-tip, .tacinfo:focus .tacinfo-tip { display: block; }
 .reserve.r0 { bottom: 40px; }
 .reserve .rhead { padding: 6px 10px; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
 .reserve .rhead b { font-family: var(--font-display); letter-spacing: .06em; text-transform: uppercase; font-size: 12px; }
@@ -647,6 +662,12 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 		<!-- each player's reserves, pinned to the board's corners at any zoom; hover to open, drag onto the table to deploy -->
 		<div class="reserve r1" id="res1" aria-label="Player 2 reserves"></div>
 		<div class="reserve r0" id="res0" aria-label="Player 1 reserves"></div>
+		<div class="tacwrap t1"><div class="tacov" id="tac1" aria-label="Player 2 tactical cards"></div></div>
+		<div class="tacwrap t0">
+			<div class="tacinfo" tabindex="0" aria-label="About tactical cards"><span class="ii" aria-hidden="true">i</span>
+				<div class="tacinfo-tip">Click a card to exhaust it for its CP, BM or PE; the counter shows what is still available. Cards are readied in the Cleanup step, which happens when the round goes up. The + on a panel adds a card or readies them all.</div></div>
+			<div class="tacov" id="tac0" aria-label="Player 1 tactical cards"></div>
+		</div>
 		<div class="scale" aria-hidden="true"><div class="scale-bar" id="scaleBar"></div><span id="scaleLabel"></span></div>
 		<div class="hint">Drag a base: its unit follows in coherency (<b>Alt</b>+drag moves it alone); drag again to add a leg · <b>Enter</b> confirm · <b>Shift+Enter</b> confirm all · <b>Esc</b> cancel · <b>Backspace</b> drop last leg<br>Right-click an empty spot to place a faction token · Double-click to ping a spot · right-click a model to send its unit to reserves · <b>Shift</b>+click or <b>Shift</b>+drag to select several · <b>R</b> ruler · Drag the table to pan · scroll to zoom · <b>F</b> fit table</div>
 		<div class="toast" id="toast" hidden></div>
@@ -751,11 +772,6 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 			<div class="card" id="card"></div>
 		</section>
 
-		<section class="box" aria-labelledby="tacH">
-			<h2 id="tacH">Tactical cards</h2>
-			<div id="tacticsBody"></div>
-			<p class="note">Click a card to exhaust it for its CP, BM or PE; the counter shows what is still available. Cards are readied in the Cleanup step, which happens here when the round goes up.</p>
-		</section>
 
 		<section class="box" id="refNote">
 			<h2>Cards &amp; rules</h2>
@@ -4650,32 +4666,42 @@ function tacticalOptions() {
 	for (const c of LIB.cards.filter(c => c.cardType === 'tactical' || c.cardType === 'faction')) { if (!byF.has(c.faction)) byF.set(c.faction, []); byF.get(c.faction).push(c); }
 	return [...byF].map(([f, cs]) => `<optgroup label="${esc(f)}">${cs.sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}">${esc(c.name)}${c.resource ? ` (${c.resource.value} ${c.resource.type})` : ''}</option>`).join('')}</optgroup>`).join('');
 }
+const tacAdding = new Set();   // panels with their add row open
 function renderTactics() {
-	$('#tacticsBody').innerHTML = [0, 1].map(i => {
+	[0, 1].forEach(i => {
+		const box = $('#tac' + i); if (!box) return;
+		box.style.setProperty('--pc', state.players[i].color);
+		box.innerHTML = tacticsHtml(i);
+		box.classList.toggle('adding', tacAdding.has(i));
+	});
+}
+function tacticsHtml(i) {
+	return [i].map(i => {
 		const ts = state.tactics.filter(t => t.player === i), left = {}, all = {};
 		for (const t of ts) { all[t.res] = (all[t.res] || 0) + t.value; if (!t.used) left[t.res] = (left[t.res] || 0) + t.value; }
 		const res = Object.keys(all).map(r => `<span class="resv" title="${r} available from Ready cards, of ${all[r]}"><b>${left[r] || 0}</b>/${all[r]} ${r}</span>`).join(' ');
 		return `<div class="tacp">
-			<div class="group-h" style="justify-content:space-between"><span class="row" style="gap:6px"><span class="swatch" style="background:${state.players[i].color}"></span>${esc(state.players[i].name)}</span>${res}</div>
+			<div class="thead"><span><b>Tactical cards</b> <span class="note">${esc(state.players[i].name)}</span></span><span>${res}<button class="x" data-addopen="${i}" aria-expanded="${tacAdding.has(i)}" title="${tacAdding.has(i) ? 'Close' : 'Add a card, or ready them all'}">${tacAdding.has(i) ? '−' : '+'}</button></span></div>
 			<ul class="ulist">${ts.map(t => `<li class="${t.used ? 'used' : ''}">
 				<button class="tacbtn" data-toggle="${t.id}" aria-pressed="${!t.used}" title="${t.used ? 'Used: click to ready it' : 'Ready: click to exhaust it'}">${t.used ? 'Used' : 'Ready'}</button>
 				<span class="nm">${esc(t.name)}</span><span class="mm">${t.value} ${t.res}</span>
 				${t.card && libCard(t.card) ? `<button class="x" data-open="${t.card}" title="Open the card" aria-label="Open ${esc(t.name)}">⧉</button>` : ''}
-				<button class="x" data-del="${t.id}" aria-label="Remove ${esc(t.name)}">✕</button></li>`).join('') || '<li class="note">No cards yet. Import an army list or add one below.</li>'}</ul>
-			<div class="row" style="flex-wrap:nowrap">
+				<button class="x" data-del="${t.id}" aria-label="Remove ${esc(t.name)}">✕</button></li>`).join('') || '<li class="note">No cards yet. Import an army list, or add one with +.</li>'}</ul>
+			<div class="row tadd">
 				${LIB ? `<select data-addsel="${i}" aria-label="Card to add" style="flex:1;min-width:0">${tacticalOptions()}</select>` : `<input type="text" data-addname="${i}" placeholder="Card name" aria-label="Card name" style="flex:1;min-width:0">`}
 				<button class="btn" data-add="${i}">Add</button>
 				<button class="btn" data-ready="${i}" ${ts.some(t => t.used) ? '' : 'disabled'}>Ready all</button>
 			</div></div>`;
 	}).join('');
 }
-$('#tacticsBody').addEventListener('click', e => {
+function onTacticsClick(e) {
 	const b = e.target.closest('button'); if (!b) return;
 	const find = id => state.tactics.find(t => t.id === id);
 	if (b.dataset.toggle) { const t = find(b.dataset.toggle); if (t) t.used = !t.used; }
 	else if (b.dataset.del) state.tactics = state.tactics.filter(t => t.id !== b.dataset.del);
 	else if (b.dataset.ready) state.tactics.forEach(t => { if (t.player === +b.dataset.ready) t.used = false; });
 	else if (b.dataset.open) { openCard(b.dataset.open); return; }
+	else if (b.dataset.addopen) { const i = +b.dataset.addopen; tacAdding.has(i) ? tacAdding.delete(i) : tacAdding.add(i); renderTactics(); return; }
 	else if (b.dataset.add) {
 		const i = +b.dataset.add, s = $(`[data-addsel="${i}"]`), n = $(`[data-addname="${i}"]`);
 		const c = s ? libCard(s.value) : null, name = c ? c.name : n?.value.trim();
@@ -4684,7 +4710,11 @@ $('#tacticsBody').addEventListener('click', e => {
 		state.tactics.push({ id: newId('k'), player: i, name, card: c?.id || null, res, value: c?.resource?.value ?? 1, used: false });
 	} else return;
 	renderTactics(); save();
-});
+}
+$('#tac0').addEventListener('click', onTacticsClick);
+$('#tac1').addEventListener('click', onTacticsClick);
+// keep the wheel on a card list from zooming the table
+for (const id of ['#tac0', '#tac1']) $(id).addEventListener('wheel', e => e.stopPropagation(), { passive: true });
 
 // ---- matching units to cards
 // Linking a unit to a card gives its models the card's base size, a portrait where they have none, and the unit
