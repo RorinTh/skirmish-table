@@ -24,9 +24,13 @@ Units can carry tokens: right-click a model and choose **Add token…**, or use 
 
 Right-click an empty spot of the table and choose **Place faction token here…** for a Faction Indicator (32 mm), a Force Field (80 mm), a Shade (40 mm) or a Creep Tumor (32 mm). Right-click an Adept and choose **Place Shade** for a see-through copy of it next to it. These pieces are not units: they count no supply and do not contest Mission Markers. Drag them anywhere; while one is selected, the distance to every model, Mission Marker and terrain piece shows.
 
+## Example armies
+
+Under **Import army list**, the list **Or an example army from the rulebook** holds the six example armies of the rulebook (12.12): Terran Armed Forces, Raynor's Raiders, Zerg Swarm, Kerrigan's Swarm, Daelaam and Khalai, 1000 Minerals each. Choosing one fills in the list box with its units, upgrades, Faction and Tactical cards, missions and deployments; pick the player and press **Add army to table**.
+
 ## Dice from the selected unit
 
-With the card library loaded and a model selected, a Hit roll shows a **Weapon** list with the unit's weapons from its card. Picking one fills in the dice: its RoA times the unit's models still alive, its Hit value and its surge die (D3, D3+1 or D6). Selecting another unit, or the unit losing a model, fills them in again. Choose **By hand** to set the dice yourself.
+With the card library loaded and a model selected, a Hit roll shows a **Weapon** list with the unit's weapons from its card. Picking one fills in the dice: its RoA times the unit's models still alive, its Hit value and its surge die (D3, D3+1 or D6). Selecting another unit, or the unit losing a model, fills them in again. A Blast Template weapon (RoA BT+4) starts at 5 dice; change it by hand as needed. Choose **By hand** to set the dice yourself.
 
 ## Online play
 

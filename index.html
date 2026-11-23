@@ -518,6 +518,10 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 					<label>Player</label>
 					<div class="pick" id="listPlayer"></div>
 				</div>
+				<div class="field">
+					<label for="listExample">Or an example army from the rulebook (1000 Minerals)</label>
+					<select id="listExample"><option value="">Choose one…</option></select>
+				</div>
 				<textarea id="listText" rows="7" placeholder="Paste the army list here" aria-label="Army list"></textarea>
 				<label class="row" style="gap:6px;flex-wrap:nowrap"><input type="checkbox" id="listReplace" style="flex:none"> <span>Remove this player's models from the table first</span></label>
 				<div id="listPreview"></div>
@@ -3730,6 +3734,66 @@ function planArmy(list) {
 		return { ...u, models, card, total, supply: supplyFor(card, total) ?? 0 };
 	});
 }
+// ---- the six example armies of the rulebook (12.12 Example Armies): units, models, upgrades and cards,
+// written out as a New Recruit style list so they go through the same import
+const EXAMPLE_ARMIES = [
+	{ name: 'Terran Armed Forces', race: 'Terran', faction: 'Terran Armed Forces', cards: [['Factory', '35 Vespene Gas'], ['Barracks', '25 Vespene Gas'], ['Orbital Command', '25 Vespene Gas']],
+		missions: ['Supply Drop', 'Gather the Resources'], deployments: ['Abandoned Camp', 'Agria Valley'], units: [
+		['Marines', 280, 'Combat Shield, Grenades - Frag, Bayonet', [[9, 'Marine']]],
+		['Marauders', 190, 'Veteran of Tarsonis, Kinetic Foam', [[2, 'Marauder']]],
+		['Goliath', 220, 'Scatter Missiles', [[1, 'Goliath']]],
+		['Marauders', 170, 'Laser Targeting Systems', [[2, 'Marauder']]],
+		['Medics', 140, 'Stabilizer Medpacks', [[3, 'Medic']]]] },
+	{ name: "Raynor's Raiders (Founders Edition)", race: 'Terran', faction: "Raynor's Raiders", cards: [['Academy', '35 Vespene Gas'], ['Barracks', '25 Vespene Gas'], ['Orbital Command', '25 Vespene Gas']],
+		missions: ['Supply Drop', 'Divide and Conquer'], deployments: ['Agria Valley', 'Dirt Side'], units: [
+		['Marines', 210, 'AGG-12, Rocket Launcher', [[6, 'Marine']]],
+		['Marauders', 170, 'Kinetic Foam', [[2, 'Marauder']]],
+		['Jim Raynor', 250, '', [[1, 'Jim Raynor']]],
+		["Raynor's Raiders (Marine)", 230, '', [[6, "Raynor's Raider"]]],
+		['Medics', 140, 'Stabilizer Medpacks', [[3, 'Medic']]]] },
+	{ name: 'Zerg Swarm', race: 'Zerg', faction: 'Zerg Swarm', cards: [['Evolution Chamber', '30 Vespene Gas'], ['Hydralisk Den', '35 Vespene Gas'], ['Accelerating Creep', '0 Vespene Gas'], ['Overseer', '25 Vespene Gas']],
+		missions: ['Gather the Resources', 'Supply Drop'], deployments: ['Dirt Side', 'Abandoned Camp'], units: [
+		['Swarmlings (Zergling)', 260, '', [[18, 'Swarmling']]],
+		['Hydralisks', 300, 'Ancillary Carapace', [[4, 'Hydralisk']]],
+		['Corpsers (Roach)', 280, 'Burrow Ambush, Tunneling Claws, Hydriodic Bile', [[3, 'Corpser']]],
+		['Queen', 160, 'Creep Speed', [[1, 'Queen']]]] },
+	{ name: "Kerrigan's Swarm (Founders Edition)", race: 'Zerg', faction: "Kerrigan's Swarm", cards: [['Evolution Chamber', '30 Vespene Gas'], ['Spawning Pool', '25 Vespene Gas'], ['Malignant Creep', '10 Vespene Gas'], ['Overseer', '25 Vespene Gas']],
+		missions: ['Hold Position', 'Frontlines'], deployments: ['Char Plains', 'Frontier'], units: [
+		['Zerglings', 180, '', [[12, 'Zergling']]],
+		['Roaches', 170, '', [[3, 'Roach']]],
+		['Kerrigan', 250, '', [[1, 'Kerrigan']]],
+		['Kerrigan Swarm Raptors (Zergling)', 250, '', [[6, 'Kerrigan Swarm Raptor']]],
+		['Queen', 150, '', [[1, 'Queen']]]] },
+	{ name: 'Protoss Daelaam', race: 'Protoss', faction: 'Daelaam', cards: [['Twilight Council', '45 Vespene Gas'], ['Forge', '30 Vespene Gas'], ['Observer', '25 Vespene Gas']],
+		missions: ['Hold Position', 'Gather the Resources'], deployments: ['Abandoned Camp', 'Frontier'], units: [
+		['Zealots', 210, 'My Life for Aiur, Leg Enhancements, We Stand as One', [[3, 'Zealot']]],
+		['Sentries', 180, 'Solid-Field Projectors, Hallucination', [[2, 'Sentry']]],
+		['Adepts', 190, 'Resonating Glaives, Glaive Strike', [[4, 'Adept']]],
+		['Stalker', 210, 'Path of Shadows, Fury of the Nerazim', [[1, 'Stalker']]],
+		['Stalker', 210, 'Path of Shadows, Fury of the Nerazim', [[1, 'Stalker']]]] },
+	{ name: 'Protoss Khalai (Founders Edition)', race: 'Protoss', faction: 'Khalai', cards: [['Warp Prism', '35 Vespene Gas'], ['Gateway', '25 Vespene Gas'], ['Observer', '25 Vespene Gas']],
+		missions: ['Frontlines', 'Divide and Conquer'], deployments: ['Frontier', 'Char Plains'], units: [
+		['Zealots', 170, 'My Life for Aiur', [[3, 'Zealot']]],
+		['Adepts', 170, 'Glaive Strike', [[4, 'Adept']]],
+		['Praetor Guard (Zealot)', 280, '', [[3, 'Praetor Guard']]],
+		['Sentries', 130, '', [[2, 'Sentry']]],
+		['Artanis', 250, '', [[1, 'Artanis']]]] }
+];
+function exampleArmyText(a) {
+	return [`${a.race} - ${a.name} (example army, rulebook 12.12)`, '',
+		'## Pre-Game', `Missions: ${a.missions.join(', ')}`, `Deployment Maps: ${a.deployments.join(', ')}`, '',
+		'## Faction', a.faction, '',
+		'## Tactical', ...a.cards.map(([n, v]) => `${n} [${v}]`), '',
+		'## Units', ...a.units.flatMap(([n, cost, up, ms]) => [`${n} [${cost} Minerals]${up ? ': ' + up : ''}`, ...ms.map(([k, m]) => `• ${k}x ${m}`)]),
+		'', `Total: ${a.units.reduce((t, u) => t + u[1], 0)} Minerals`].join('\n');
+}
+$('#listExample').innerHTML += EXAMPLE_ARMIES.map((a, i) => `<option value="${i}">${esc(a.race)}: ${esc(a.name)}</option>`).join('');
+$('#listExample').addEventListener('change', e => {
+	const a = EXAMPLE_ARMIES[+e.target.value];
+	if (!a || e.target.value === '') return;
+	$('#listText').value = exampleArmyText(a);
+	renderListPreview();
+});
 let listPlayer = 0;
 function renderListPlayer() {
 	$('#listPlayer').innerHTML = state.players.map((p, i) =>
@@ -4058,7 +4122,7 @@ function renderWeapons(force) {
 function applyWeapon() {
 	const uw = unitWeapons(), w = uw?.ws[+$('#diceWeapon').value];
 	if (!w || $('#diceWeapon').value === '') return;
-	const roa = /^\d+$/.test(String(w.roa).trim()) ? +w.roa : null, hit = /(\d)\+?/.exec(String(w.hit || ''));
+	const ra = String(w.roa).trim(), bt = /^BT\s*\+\s*(\d+)$/i.exec(ra), roa = /^\d+$/.test(ra) ? +ra : bt ? 1 + +bt[1] : null, hit = /(\d)\+?/.exec(String(w.hit || ''));
 	if (roa) $('#diceCount').value = Math.min(60, roa * (aliveModels(uw.u).length || 1));
 	if (hit) $('#diceTarget').value = String(Math.min(6, Math.max(2, +hit[1])));
 	const sd = String(w.surgeDice || '').trim();
@@ -4485,7 +4549,10 @@ function findTacticalCard(name, faction) {
 	if (!LIB) return null;
 	const k = wordKey(name), f = String(faction || '').toLowerCase();
 	const pool = LIB.cards.filter(c => c.cardType === 'tactical' || c.cardType === 'faction');
-	return pool.find(c => wordKey(c.name) === k && c.faction.toLowerCase() === f) || pool.find(c => wordKey(c.name) === k) || null;
+	// the exact name first, so "Barracks" is the Barracks card and not "Barracks (Tech Lab)"
+	const n = String(name || '').trim().toLowerCase(), exact = pool.filter(c => c.name.toLowerCase() === n);
+	return exact.find(c => c.faction.toLowerCase() === f) || exact[0]
+		|| pool.find(c => wordKey(c.name) === k && c.faction.toLowerCase() === f) || pool.find(c => wordKey(c.name) === k) || null;
 }
 function tacticFrom(name, player, faction) {
 	const c = findTacticalCard(name, faction);
