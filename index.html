@@ -185,6 +185,12 @@ a.rulesite { color: var(--fg); text-decoration: none; display: inline-block; }
 #viewport, #viewport canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .tag { position: absolute; left: 0; top: 0; white-space: nowrap; font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; padding: 2px 7px; border-radius: 4px; font-variant-numeric: tabular-nums; }
+.tag.quarter { background: color-mix(in srgb, var(--panel) 82%, transparent); border: 2px solid var(--line); color: var(--fg); font-family: var(--font-display); font-size: 14px; padding: 2px 9px; }
+.tag.quarter.ql { margin-left: -46px; }
+.tag.quarter.qr { margin-left: 46px; }
+.tag.quarter b { color: var(--muted); margin-right: 4px; }
+.tag.qtag { background: transparent; color: var(--fg); font-size: 10.5px; padding: 0 3px; transform-origin: top; text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 5px var(--bg); }
+.tag.qtag.none { color: var(--muted); font-style: italic; }
 .tag.measure { background: var(--tape); color: var(--tape-ink); }
 .tag.move { background: var(--raised); color: var(--fg); border: 1px solid var(--line); }
 .tag.move.warn { border-color: var(--danger); color: var(--danger); }
@@ -1599,6 +1605,13 @@ function buildTable() {
 	}
 	tableGroup.add(lines(ticks, 0xc9d4e2, 0.75));
 	tableGroup.add(deploymentGroup());
+	if (isDivide()) {
+		const mat = new THREE.MeshBasicMaterial({ color: 0xf2f5f9, transparent: true, opacity: 0.55, depthWrite: false });
+		for (const [len, vertical] of [[d, true], [w, false]]) for (let a = -len / 2; a < len / 2; a += 1.6) {
+			const L = Math.min(1, len / 2 - a), m = new THREE.Mesh(new THREE.PlaneGeometry(vertical ? 0.12 : L, vertical ? L : 0.12).rotateX(-Math.PI / 2), mat);
+			m.position.set(vertical ? 0 : a + L / 2, 0.007, vertical ? a + L / 2 : 0); m.renderOrder = 2; tableGroup.add(m);
+		}
+	}
 }
 
 // ---- pieces
@@ -3741,6 +3754,7 @@ function updateObjectives() {
 function animate() {
 	requestAnimationFrame(animate);
 	updateObjectives();
+	updateQuarters();
 	updateTokenStrips();
 	if (pings.length) updatePings(performance.now());
 	controls.update();
@@ -4371,9 +4385,61 @@ function renderMissionSel() {
 }
 $('#missionSel').addEventListener('change', e => {
 	state.table.mission = normMission(e.target.value);
-	renderMissionSel(); save();
+	renderMissionSel(); buildTable(); save();
 	if (state.table.mission) toast(`Mission: ${esc(state.table.mission)}. Point at a score at the top to see how it scores.`);
 });
+function isDivide() { return /^divide and conquer/i.test(state?.table?.mission || ''); }
+// the quarter (0-3: top left, top right, bottom left, bottom right) a base lies wholly within, or null on a line
+function quarterOf(m, p = shownAt(m)) {
+	const r = radius(m), qx = p.x - r >= 0 ? 1 : p.x + r <= 0 ? 0 : null, qz = p.z - r >= 0 ? 1 : p.z + r <= 0 ? 0 : null;
+	return qx === null || qz === null ? null : qz * 2 + qx;
+}
+const quarterLabels = [], unitQLabels = new Map();
+let quarterSig = '';
+function updateQuarters() {
+	const on = isDivide();
+	if (!on) {
+		if (quarterLabels.length || unitQLabels.size) { quarterLabels.forEach(dropLabel); quarterLabels.length = 0; for (const L of unitQLabels.values()) dropLabel(L); unitQLabels.clear(); quarterSig = ''; }
+		return;
+	}
+	const { w, d } = state.table, sup = [[0, 0], [0, 0], [0, 0], [0, 0]], perUnit = [];
+	for (const u of state.units) {
+		const ms = state.minis.filter(m => m.unit === u.id && !m.reserve && !m.tok && !isDead(m));
+		if (!ms.length) continue;
+		const qs = new Set(ms.map(m => quarterOf(m))), q = qs.size === 1 ? [...qs][0] : null;
+		const holds = ms.some(m => { const n = contestOf.get(m.id); return n != null && state.ctl[n]?.c === u.player; });
+		const v = unitSupply(u) + (holds ? 1 : 0);
+		if (q !== null) sup[q][u.player] += v;
+		perUnit.push({ u, m: ms[0], q, v, holds });
+	}
+	const P = state.players;
+	const sig = JSON.stringify([sup, perUnit.map(x => [x.u.id, x.q, x.v]), P.map(p => p.color), w, d]);
+	if (sig !== quarterSig) {
+		quarterSig = sig;
+		while (quarterLabels.length < 4) quarterLabels.push(makeLabel('quarter'));
+		sup.forEach((s2, q) => {
+			const L = quarterLabels[q], lead = s2[0] > s2[1] ? 0 : s2[1] > s2[0] ? 1 : null;
+			L.el.innerHTML = `<b>Q${q + 1}</b> <span style="color:${P[0].color}">${s2[0]}</span> : <span style="color:${P[1].color}">${s2[1]}</span>`;
+			L.el.style.borderColor = lead === null ? '' : P[lead].color;
+			L.el.title = lead === null ? `Quarter ${q + 1}: no one has more supply wholly within it` : `Quarter ${q + 1}: ${P[lead].name} has more supply wholly within it`;
+			L.center = true; L.on = true;
+			L.pos.set(0, 0.3, (q > 1 ? 1 : -1) * (d / 2 - 1.1)); L.el.classList.add(q % 2 ? 'qr' : 'ql');   // at the table's edge, beside the dividing line
+		});
+		const seen = new Set();
+		for (const x of perUnit) {
+			seen.add(x.u.id);
+			let L = unitQLabels.get(x.u.id);
+			if (!L) { L = makeLabel('qtag'); unitQLabels.set(x.u.id, L); }
+			L.el.textContent = x.q === null ? 'no quarter' : `Q${x.q + 1}${x.holds ? ' +1' : ''}`;
+			L.el.classList.toggle('none', x.q === null);
+			L.el.title = x.q === null ? `${x.u.name} is not wholly within one quarter and counts in none` : `${x.u.name}: ${x.v} supply in quarter ${x.q + 1}${x.holds ? ' (1 extra for controlling a Mission Marker)' : ''}`;
+			L.on = true;
+		}
+		for (const [id, L] of unitQLabels) if (!seen.has(id)) { dropLabel(L); unitQLabels.delete(id); }
+	}
+	// each unit's tag sits under its first model, wherever that is shown
+	for (const x of perUnit) { const L = unitQLabels.get(x.u.id); if (L) { const p = shownAt(x.m); L.pos.set(p.x, 0, p.z + radius(x.m) + 0.3); L.center = true; } }
+}
 function syncTableInputs() {
 	try { renderMissionSel(); } catch { }   // the card library may not be set up yet while the page starts
 	$('#deploySel').value = state.table.deploy || '';
@@ -5553,7 +5619,7 @@ function applyRemoteMeta(d) {
 		if (!net.metaLoaded) fitView();
 	}
 	if (remote.table.lockTerrain !== state.table.lockTerrain) setTerrainLock(remote.table.lockTerrain, true);
-	if (remote.table.mission !== state.table.mission) { state.table.mission = remote.table.mission; renderMissionSel(); if (!scorePop.hidden) renderScorePop(); }
+	if (remote.table.mission !== state.table.mission) { state.table.mission = remote.table.mission; renderMissionSel(); buildTable(); if (!scorePop.hidden) renderScorePop(); }
 	if (JSON.stringify(players) !== JSON.stringify(state.players)) {
 		state.players = players;
 		for (const o of objs.values()) if (o.kind === 'mini') refreshFace(o);
