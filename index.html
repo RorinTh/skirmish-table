@@ -139,7 +139,7 @@ a.rulesite { color: var(--fg); text-decoration: none; display: inline-block; }
 .top h1 { font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: .04em; margin: 0; text-transform: uppercase; }
 .top p { margin: 0; color: var(--muted); font-size: 12.5px; }
 
-.board { position: relative; min-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.board { position: relative; min-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); user-select: none; -webkit-user-select: none; }
 #viewport, #viewport canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .tag { position: absolute; left: 0; top: 0; white-space: nowrap; font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; padding: 2px 7px; border-radius: 4px; font-variant-numeric: tabular-nums; }
@@ -1100,6 +1100,8 @@ el.addEventListener('pointerdown', onDown);
 el.addEventListener('pointermove', onMove);
 el.addEventListener('pointerup', onUp);
 el.addEventListener('pointercancel', onUp);
+el.addEventListener('lostpointercapture', e => { if (drag || box || measure?.active) onUp(e); });
+boardEl.addEventListener('dragstart', e => e.preventDefault());
 el.addEventListener('pointerleave', () => { tipEl.hidden = true; });
 el.addEventListener('contextmenu', e => e.preventDefault());
 // right-click a model (without dragging, which pans the view) for a small menu
@@ -2257,6 +2259,7 @@ const tipEl = $('#tip');
 function onDown(e) {
 	if (e.button !== 0) return;
 	tipEl.hidden = true;
+	try { const ts = getSelection(); if (ts && !ts.isCollapsed) ts.removeAllRanges(); } catch { }
 	down = { x: e.clientX, y: e.clientY, click: true };
 	const hit = pick(e);
 	if (mode === 'measure') {
@@ -5083,8 +5086,17 @@ function applyRemotePiece(id, b) {
 		if (ex) Object.assign(ex, item); else state.units.push(item);
 		return;
 	}
+	// a move waiting here for approval: if the other player has moved the model, their move wins and ours goes
+	// back; if only its other details changed (damage, a picture), take them and keep the waiting move
+	let force = false, keepAt = null;
+	if (ex && kind === 'mini' && moves.has(id) && drag?.item !== ex) {
+		let was = null; try { was = JSON.parse(net.synced.get(id) || 'null'); } catch { }
+		if (!was || was.x !== r3(item.x) || was.z !== r3(item.z)) { yieldMove(id); force = true; }
+		else keepAt = { x: ex.x, z: ex.z };
+	}
 	// a local change not yet sent (or a move being made) wins: it is written next
-	if (ex && (drag?.item === ex || moves.has(id) || JSON.stringify(pieceDoc(ex, kind)) !== net.synced.get(id))) { net.synced.set(id, remoteJson); save(); return; }
+	if (ex && !force && !keepAt && (drag?.item === ex || moves.has(id) || JSON.stringify(pieceDoc(ex, kind)) !== net.synced.get(id))) { net.synced.set(id, remoteJson); save(); return; }
+	if (keepAt) { item.x = keepAt.x; item.z = keepAt.z; }
 	net.synced.set(id, remoteJson);
 	if (kind === 'terrain') {
 		if (ex) { Object.assign(ex, item); removeObj(id); addTerrainObj(ex); }
@@ -5097,6 +5109,19 @@ function applyRemotePiece(id, b) {
 		if (rebuild) rebuildMini(ex);   // also brings a model onto the table from reserves, or takes it off
 		else { objs.get(id)?.g.position.set(ex.x, 0, ex.z); if (face) refreshFace(objs.get(id)); }
 	} else { state.minis.push(item); addMiniObj(item); }
+}
+// the other player moved a model that has a move waiting here: that whole move goes back to where it started
+function yieldMove(id) {
+	const lead = moves.get(id)?.follow || id, mv = moves.get(lead);
+	if (mv) {
+		const m = findMini(lead), s0 = mv.points[0];
+		if (m) { m.x = s0.x; m.z = s0.z; objs.get(lead)?.g.position.set(m.x, 0, m.z); }
+		dropMove(lead);                                  // its unconfirmed followers go back too
+	}
+	if (moves.has(id)) dropMove(id);
+	sendMoves(); syncRanges();
+	const m = findMini(id);
+	if (m) toast(`${esc(m.name)} was moved by the other player, so your unconfirmed move of it was cancelled`);
 }
 function removeRemotePiece(id) {
 	net.synced.delete(id);
@@ -5120,7 +5145,7 @@ function sendMoves() {
 	if (!net.nroom) return;
 	const list = [...moves.values()].slice(-30).map(mv => {
 		const m = findMini(mv.id);
-		return m && { id: mv.id, x: r3(m.x), z: r3(m.z), pts: mv.points.slice(-10).map(p => [r3(p.x), r3(p.z)]) };
+		return m && { id: mv.id, x: r3(m.x), z: r3(m.z), pts: mv.points.slice(-10).map(p => [r3(p.x), r3(p.z)]), ...(mv.points.length > 10 ? { from: [r3(mv.points[0].x), r3(mv.points[0].z)] } : {}) };
 	}).filter(Boolean);
 	net.nroom.presence({ moves: list, drag: null }).catch(() => { });
 }
@@ -5132,7 +5157,8 @@ function remoteDragsFrom(peers) {
 		for (const d of list) {
 			if (!d || typeof d.id !== 'string' || !Number.isFinite(d.x) || !Number.isFinite(d.z)) continue;
 			const pts = (Array.isArray(d.pts) ? d.pts : []).slice(0, 20).filter(q => Array.isArray(q) && Number.isFinite(q[0]) && Number.isFinite(q[1])).map(q => ({ x: q[0], z: q[1] }));
-			out.set(d.id, { x: clampN(d.x, -100, 100, 0), z: clampN(d.z, -100, 100, 0), pts, seat: p.presence?.seat });
+			const f = Array.isArray(d.from) && Number.isFinite(d.from[0]) && Number.isFinite(d.from[1]) ? { x: d.from[0], z: d.from[1] } : pts[0] || null;
+			out.set(d.id, { x: clampN(d.x, -100, 100, 0), z: clampN(d.z, -100, 100, 0), pts, seat: p.presence?.seat, from: f });
 		}
 	}
 	return out;
@@ -5147,6 +5173,7 @@ function drawRemote() {
 	for (const [id, d] of rd) {
 		const m = findMini(id), o = objs.get(id);
 		if (!m || !o || drag?.item === m || moves.has(id)) continue;
+		if (d.from && Math.hypot(m.x - d.from.x, m.z - d.from.z) > 0.02) continue;   // moved since: that preview is stale
 		o.g.position.set(d.x, 0, d.z); overridden.add(id);
 		const pts = [...d.pts, { x: d.x, z: d.z }];
 		const col = d.seat === 0 || d.seat === 1 ? state.players[d.seat].color : '#ffffff';
