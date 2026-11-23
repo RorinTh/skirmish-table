@@ -717,6 +717,15 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 				</div>
 				<label class="row" style="gap:6px" id="surgeMatchWrap"><input type="checkbox" id="surgeMatch" checked> target has the surge tag</label>
 			</div>
+			<div class="row" id="critRow">
+				<span class="note">Critical hit</span>
+				<div class="stepper">
+					<button id="critMinus" aria-label="Lower critical hit">−</button>
+					<input id="critVal" type="number" min="0" max="30" value="0" aria-label="Critical hit">
+					<button id="critPlus" aria-label="Raise critical hit">+</button>
+				</div>
+				<span class="note">hits skip armour, against any unit</span>
+			</div>
 			<div class="row">
 				<button class="btn primary" id="rollBtn">Roll</button>
 				<span class="note" id="carryNote"></span>
@@ -4004,7 +4013,7 @@ function newRoll() {
 	commitRoll({
 		kind, label: (KIND_LABEL[kind] + (attackPair() ? `: ${attackPair().au.name} → ${attackPair().bu.name}` : '')).slice(0, 80), dice: Array.from({ length: diceCount() }, () => ({ v: d6(), re: false })), target: diceTarget(),
 		surge: kind === 'hit' && dice.surge ? { type: dice.surge, v: dice.surge === 'fixed' ? clampN($('#surgeFixed').value, 0, 30, 1) | 0 : d6() } : null, match: kind === 'hit' && !!dice.surge && dice.surgeMatch,
-		speed: null, carry: kind === 'armour' ? dice.carry : 0
+		speed: null, carry: kind === 'armour' ? dice.carry : 0, crit: kind === 'hit' ? clampN($('#critVal').value, 0, 30, 0) | 0 : 0
 	});
 	if (kind === 'armour') dice.carry = 0;
 	renderDiceControls();
@@ -4038,7 +4047,8 @@ function normRoll(id, b) {
 	return { id, ts: Number(b.ts) || 0, seat: b.seat === 0 || b.seat === 1 ? b.seat : 2, name: String(b.name || 'Someone').slice(0, 24),
 		kind: KINDS.includes(b.kind) ? b.kind : 'plain', label: String(b.label || 'Roll').slice(0, 80),
 		dice: b.dice.map(d => ({ v: clampN(d?.v, 1, 6, 1) | 0, re: !!d?.re })), target: clampN(b.target, 0, 6, 0) | 0,
-		surge: s, match: !!b.match && !!s, speed: b.speed == null ? null : clampN(b.speed, 0, 30, 0) | 0, carry: clampN(b.carry, 0, 60, 0) | 0 };
+		surge: s, match: !!b.match && !!s, speed: b.speed == null ? null : clampN(b.speed, 0, 30, 0) | 0, carry: clampN(b.carry, 0, 60, 0) | 0,
+		crit: clampN(b.crit, 0, 30, 0) | 0 };
 }
 function onRolls(snap) {
 	dice.history = snap.docs.map(d => normRoll(d.id, d.data())).filter(Boolean);
@@ -4051,12 +4061,13 @@ function onRolls(snap) {
 function outcome(r) {
 	const n = r.dice.length, t = r.target, ok = t ? r.dice.filter(d => d.v >= t).length : 0;
 	if (r.kind === 'hit') {
-		const sv = surgeValue(r.surge), moved = r.match ? Math.min(sv, ok) : 0, toArmour = ok - moved;
-		const surge = !r.surge ? '' : (r.surge.type === 'fixed' ? ` · surge ${sv}` : ` · surge ${r.surge.type} = ${sv}`) + (r.match ? (moved ? `, ${moved} skip armour` : '') : ', no tag match so ignored');
+		const sv = surgeValue(r.surge), crit = r.crit || 0, moved = Math.min((r.match ? sv : 0) + crit, ok), toArmour = ok - moved;
+		const surge = !r.surge ? '' : (r.surge.type === 'fixed' ? ` · surge ${sv}` : ` · surge ${r.surge.type} = ${sv}`) + (r.match ? '' : ', no tag match so ignored');
+		const skip = (crit ? ` · critical hit ${crit}` : '') + (moved ? ` · ${moved} skip armour` : '');
 		const next = !ok ? null : toArmour
 			? { kind: 'armour', count: toArmour, carry: moved, label: `Roll ${plural(toArmour, 'armour save')}` + (moved ? ` (${moved} already in the damage pool)` : '') }
 			: { kind: 'evade', count: moved, carry: 0, label: `${plural(moved, 'die')} in the damage pool: roll evades if the target may evade` };
-		return { main: plural(ok, 'hit'), sub: `of ${n} on ${t}+${surge}`, next };
+		return { main: plural(ok, 'hit'), sub: `of ${n} on ${t}+${surge}${skip}`, next };
 	}
 	if (r.kind === 'armour') {
 		const failed = n - ok, dmg = failed + r.carry;
@@ -4082,6 +4093,7 @@ function renderDiceControls() {
 	$('#poolRow').hidden = k === 'charge';
 	$('#speedRow').hidden = k !== 'charge';
 	$('#surgeRow').hidden = k !== 'hit';
+	$('#critRow').hidden = k !== 'hit';
 	if (k !== 'hit') $('#weaponRow').hidden = true;
 	$('#surgeMatchWrap').hidden = !dice.surge;
 	$('#surgeFixedWrap').hidden = dice.surge !== 'fixed';
@@ -4089,7 +4101,7 @@ function renderDiceControls() {
 	$('#targetLabel').textContent = TARGET_LABEL[k] || '';
 	$('#diceTarget').options[0].hidden = k !== 'plain';
 	if (k !== 'plain' && diceTarget() === 0) $('#diceTarget').value = '4';
-	$('#carryNote').textContent = k === 'armour' && dice.carry ? `+ ${plural(dice.carry, 'surge hit')} already in the damage pool` : '';
+	$('#carryNote').textContent = k === 'armour' && dice.carry ? `+ ${plural(dice.carry, 'hit')} (surge / critical) already in the damage pool` : '';
 }
 // the selected unit's card can fill in its Armour, Evade or Speed
 function attackPair() {
@@ -4172,6 +4184,8 @@ function applyWeapon() {
 	if (hit) $('#diceTarget').value = String(Math.min(6, Math.max(2, +hit[1])));
 	const sd = String(w.surgeDice || '').trim();
 	dice.surge = !w.surgeType || w.surgeType === '-' ? '' : ['D3', 'D3+1', 'D6'].includes(sd) ? sd : /^BT$/i.test(sd) ? 'fixed' : '';
+	const cr = /CRITICAL HIT\s*\((\d+)\)/i.exec(String(w.keywords || ''));
+	$('#critVal').value = cr ? cr[1] : 0;
 	const pr = attackPair();
 	if (pr?.bc && dice.surge) { dice.surgeMatch = surgeMatches(w, pr.bc); $('#surgeMatch').checked = dice.surgeMatch; }
 	renderDiceControls();
@@ -4200,6 +4214,8 @@ function fillDefence() {
 	const x = /(\d)\+?/.exec(String(sc.c.stats?.[k] ?? ''));
 	if (x) { $('#diceTarget').value = String(Math.min(6, Math.max(2, +x[1]))); renderDiceControls(); }
 }
+$('#critMinus').addEventListener('click', () => { $('#critVal').value = Math.max(0, (clampN($('#critVal').value, 0, 30, 0) | 0) - 1); });
+$('#critPlus').addEventListener('click', () => { $('#critVal').value = Math.min(30, (clampN($('#critVal').value, 0, 30, 0) | 0) + 1); });
 $('#surgeFixedMinus').addEventListener('click', () => { $('#surgeFixed').value = Math.max(0, (clampN($('#surgeFixed').value, 0, 30, 1) | 0) - 1); });
 $('#surgeFixedPlus').addEventListener('click', () => { $('#surgeFixed').value = Math.min(30, (clampN($('#surgeFixed').value, 0, 30, 1) | 0) + 1); });
 $('#surgePick').addEventListener('click', e => { const b = e.target.closest('button[data-s]'); if (!b) return; dice.surge = b.dataset.s; renderDiceControls(); });
@@ -4236,7 +4252,7 @@ function renderDice() {
 		const o = outcome(h);
 		const time = new Date(h.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 		const col = h.seat === 0 || h.seat === 1 ? state.players[h.seat].color : 'transparent';
-		const what = h.kind === 'charge' ? `Charge, Speed ${h.speed}` : `${esc(h.label)} ${h.dice.length}D6${h.target ? ' ' + h.target + '+' : ''}${h.surge ? ' + surge ' + (h.surge.type === 'fixed' ? h.surge.v : h.surge.type) : ''}`;
+		const what = h.kind === 'charge' ? `Charge, Speed ${h.speed}` : `${esc(h.label)} ${h.dice.length}D6${h.target ? ' ' + h.target + '+' : ''}${h.surge ? ' + surge ' + (h.surge.type === 'fixed' ? h.surge.v : h.surge.type) : ''}${h.crit ? ' + crit ' + h.crit : ''}`;
 		return `<li><span><span class="swatch" style="background:${col};display:inline-block"></span> ${time} <b>${esc(h.name)}</b> ${what} → <b>${esc(o.main)}</b></span><span>${h.dice.map(d => d.v).sort((a, b) => b - a).join(' ')}${h.surge ? ' | S' + h.surge.v : ''}</span></li>`;
 	}).join('');
 }
