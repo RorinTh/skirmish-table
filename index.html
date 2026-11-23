@@ -1118,7 +1118,7 @@ el.addEventListener('contextmenu', e => {
 		const tp = tablePoint(e), mk = tp && [...markerViz].find(([, v]) => Math.hypot(tp.x - v.px, tp.z - v.pz) <= MARKER_R + 0.4);
 		if (!mk) {
 			if (!tp || Math.abs(tp.x) > state.table.w / 2 || Math.abs(tp.z) > state.table.d / 2) { closeCtx(); return; }
-			ctxMenu.innerHTML = `<button role="menuitem" data-act="place">Place faction token here…</button>`;
+			ctxMenu.innerHTML = `<button role="menuitem" data-act="place">Place faction token here…</button><button role="menuitem" data-act="blast">Place Blast Template here</button>`;
 			ctxMenu.dataset.px = tp.x; ctxMenu.dataset.pz = tp.z; ctxMenu.dataset.id = '';
 			ctxMenu.hidden = false;
 			const r = ctxMenu.getBoundingClientRect();
@@ -1155,7 +1155,8 @@ el.addEventListener('contextmenu', e => {
 		<button role="menuitem" data-act="reserve">Send ${n > 1 ? `unit (${n} models)` : 'to'} to reserves</button>
 		<button role="menuitem" data-act="token">Add token…</button>
 		${/adept/i.test(libCard(findUnit(m.unit)?.card)?.name || findUnit(m.unit)?.name || m.name) ? '<button role="menuitem" data-act="shade">Place Shade</button>' : ''}
-		${n > 1 ? '<button role="menuitem" data-act="unit">Select unit</button>' : ''}`.replace('Send to to', 'Send to');
+		${n > 1 ? '<button role="menuitem" data-act="unit">Select unit</button>' : ''}
+		<button role="menuitem" data-act="blast">Place Blast Template on it</button>`.replace('Send to to', 'Send to');
 	ctxMenu.dataset.id = m.id;
 	ctxMenu.hidden = false;
 	const r = ctxMenu.getBoundingClientRect();
@@ -1166,6 +1167,13 @@ el.addEventListener('contextmenu', e => {
 ctxMenu.addEventListener('click', e => {
 	const b = e.target.closest('button'); if (!b) return;
 	const menuAt = ctxMenu.getBoundingClientRect();   // where the menu was, for the token picker
+	if (b.dataset.act === 'blast') {
+		// on a model: centred on it, for its opponent; on the table: where clicked, for whoever is rolling
+		const on = findMini(ctxMenu.dataset.id), seat = typeof rollerSeat === 'function' ? rollerSeat() : 0;
+		closeCtx();
+		if (on) placeBlast(on.x, on.z, 1 - on.player); else placeBlast(+ctxMenu.dataset.px, +ctxMenu.dataset.pz, seat === 1 ? 1 : 0);
+		return;
+	}
 	if (b.dataset.act === 'place') { closeCtx(); openTokPlace(+ctxMenu.dataset.px, +ctxMenu.dataset.pz, menuAt.left, menuAt.top); return; }
 	if (b.dataset.act === 'deltok') { const t = findMini(ctxMenu.dataset.id); closeCtx(); if (t) { select('mini', t.id); removeSel(); } return; }
 	if (b.dataset.act === 'ctl') {
@@ -1886,6 +1894,12 @@ function addMiniObj(m) {
 		for (const mat of [top.material, sideMat]) { mat.transparent = true; mat.opacity = 0.42; mat.depthWrite = false; }
 		cyl.castShadow = false;
 	}
+	if (m.tok === 'blast') {   // a Blast Template: a see-through disc lying over the models, drawn on top of them
+		top.material.transparent = true; top.material.opacity = 0.38; top.material.depthWrite = false; top.material.depthTest = false;
+		top.renderOrder = 6; top.position.y = BASE_H + 0.02; cyl.visible = false; cyl.castShadow = false;
+		const edge = new THREE.Mesh(new THREE.RingGeometry(r - 0.04, r, 120), new THREE.MeshBasicMaterial({ color: 0xff9a4a, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false }));
+		edge.rotation.x = -Math.PI / 2; edge.position.y = BASE_H + 0.03; edge.renderOrder = 7; g.add(edge);
+	}
 	cyl.userData.ref = top.userData.ref = o;
 	objs.set(m.id, o); pickables.push(cyl, top);
 	refreshFace(o); refreshGlow(o);
@@ -2111,7 +2125,8 @@ function updateDistances() {
 			L.pos.set(m.x, BASE_H, m.z);
 		}
 	}
-	if (s) {
+	if (s?.tok === 'blast') blastCover(s, seen);
+	else if (s) {
 		const rs = radius(s);
 		for (const m of state.minis) {
 			if (m.id === s.id || m.reserve) continue;
@@ -2127,7 +2142,7 @@ function updateDistances() {
 			L.pos.set(m.x, BASE_H, m.z);
 		}
 	}
-	if (s && !s.reserve) {
+	if (s && !s.reserve && s.tok !== 'blast') {
 		const rs = radius(s), put = (key, txt, x, z, fs) => {
 			seen.add(key);
 			let L = distLabels.get(key);
@@ -2144,6 +2159,29 @@ function updateDistances() {
 		}
 	}
 	for (const [id, L] of distLabels) if (!seen.has(id)) { dropLabel(L); distLabels.delete(id); }
+}
+// the models a Blast Template covers: any base it reaches, even partly (8.7.6)
+function blastCovered(s) {
+	const R = radius(s);
+	return state.minis.filter(m => m.id !== s.id && !m.reserve && !m.tok && Math.hypot(m.x - s.x, m.z - s.z) < R + radius(m));
+}
+function blastCover(s, seen) {
+	const put = (key, txt, x, z, fs) => {
+		seen.add(key);
+		let L = distLabels.get(key);
+		if (!L) { L = makeLabel('dist'); distLabels.set(key, L); }
+		if (L.text !== txt) { L.text = txt; L.el.textContent = txt; }
+		if (L.fs !== fs) { L.fs = fs; L.el.style.fontSize = fs + 'px'; }
+		L.center = true; L.on = true; L.pos.set(x, BASE_H, z);
+	};
+	const by = new Map();
+	for (const m of blastCovered(s)) {
+		const u = findUnit(m.unit), k = u?.id || m.id;
+		by.set(k, { name: u?.name || m.name, n: (by.get(k)?.n || 0) + 1 });
+		put(m.id, 'HIT', m.x, m.z, Math.round(Math.min(16, Math.max(9, 2 * radius(m) * pxPerIn * 0.28))));
+	}
+	const txt = by.size ? [...by.values()].map(v => `${v.name}: ${v.n}`).join(' · ') : 'covers no models';
+	put('blast', txt, s.x, s.z - radius(s) - 0.35, 13);
 }
 // the point of a terrain piece's footprint nearest to (px, pz), and how far it is (0 inside)
 function terrainNearest(t, px, pz) {
@@ -2206,7 +2244,8 @@ function pick(e) {
 	aim(e);
 	const hits = ray.intersectObjects(pickables, false);
 	if (!hits.length) return null;
-	return (hits.find(h => h.object.userData.ref.kind === 'mini') || hits[0]).object.userData.ref;
+	const isMini = h => h.object.userData.ref.kind === 'mini', isBlast = h => findMini(h.object.userData.ref.id)?.tok === 'blast';
+	return (hits.find(h => isMini(h) && !isBlast(h)) || hits.find(isMini) || hits[0]).object.userData.ref;
 }
 function tablePoint(e) { aim(e); const p = new V3(); return ray.ray.intersectPlane(floor, p) ? p : null; }
 function itemOf(ref) { return ref.kind === 'mini' ? findMini(ref.id) : findTerrain(ref.id); }
@@ -2861,7 +2900,7 @@ function renderCard() {
 				<div style="font-weight:600;padding-left:6px">${esc(k?.t || m.name)}</div>
 				<div class="meta">${m.baseMm} mm token · ${esc(state.players[m.player].name)}</div>
 			</div></div>
-			<p class="note" style="margin:6px 2px">${esc(k?.s || '')}. Distances to models, Mission Markers and terrain show while it is selected.</p>
+			<p class="note" style="margin:6px 2px">${esc(k?.s || '')}.${m.tok === 'blast' ? '' : ' Distances to models, Mission Markers and terrain show while it is selected.'}</p>
 			<div class="acts">
 				<button class="btn" id="cardRanges" aria-pressed="${state.showRanges}">Ranges</button>
 				<button class="btn" id="cardSide" title="Give it to the other player">To ${esc(state.players[1 - m.player].name)}</button>
@@ -3130,6 +3169,8 @@ TOK_ICONS.siege = "<rect x=\"10\" y=\"8.6\" width=\"5\" height=\"2.8\" fill=\"#2
 TOK_CAT.push({ id: 'siege', f: 'T', ic: 'siege', t: 'SIEGE MODE', col: '#6f9fd8', round: false, s: 'Siege Tank: in Siege Mode' });
 TOK_CAT.push({ id: 'shade', f: 'P', ic: 'shade', t: 'SHADE', col: '#ffdd1a', round: true, place: true, mm: 40, s: 'Adept: its Shade, a see-through copy of the Adept on a 40 mm base. Right-click an Adept to place one next to it' });
 TOK_CAT.push({ id: 'tumor', f: 'Z', ic: 'tumor', t: 'CREEP TUMOR', col: '#a678c8', round: true, place: true, mm: 32, s: 'Zerg: a Creep Tumor on a 32 mm token', any: 'Z' });
+TOK_ICONS.blast = '<circle cx="12.5" cy="12.5" r="10.5" fill="none" stroke="#1a1a1a" stroke-width="1.4"/><circle cx="12.5" cy="12.5" r="6.5" fill="none" stroke="#1a1a1a" stroke-width="1.1" stroke-dasharray="2 1.4"/><circle cx="12.5" cy="12.5" r="1.6" fill="#1a1a1a"/><path d="M12.5 1.5v6M12.5 17.5v6M1.5 12.5h6M17.5 12.5h6" stroke="#1a1a1a" stroke-width="1.3"/>';
+TOK_CAT.push({ id: 'blast', f: 'G', ic: 'blast', t: 'BLAST TEMPLATE', col: '#ff9a4a', round: true, place: true, mm: 127, s: 'A Blast Template (BT), 5" across for now. Models whose base it covers, even partly, are marked; hits equal the covered models of the main target unit, the others take Spillover' });
 TOK_CAT.push({ id: 'forcefield', f: 'P', ic: 'guardian', t: 'FORCE FIELD', col: '#ffdd1a', round: true, place: true, mm: 80, s: 'Sentry: an 80 mm Force Field placed on the battlefield' });
 const TOK_FACTIONS = { P: ['Protoss', '#ffdd1a'], T: ['Terran', '#6f9fd8'], Z: ['Zerg', '#a678c8'], G: ['Any faction', '#fafafa'] };
 const TOK_INK = '#2b2e31', TOK_STATS = ['SPD', 'ARM', 'EVA', 'HIT', 'ROA', 'RNG'];
@@ -3354,7 +3395,18 @@ function placeShade(a) {
 	renderLists(); select('mini', m.id); save();
 	toast(`Shade placed next to ${esc(a.name)}`);
 }
+function placeBlast(x, z, player) {
+	const unit = newId('u');
+	state.units.push(normUnit({ id: unit, name: 'Blast Template', player, supply: 0 }));
+	const m = normMini({ id: newId('m'), name: 'Blast Template', player, baseMm: 127, x, z, unit, tok: 'blast' });
+	state.minis.push(m); addMiniObj(m);
+	state.example = false;
+	undoStack.push({ t: 'add', ids: [m.id] });
+	renderLists(); select('mini', m.id); save();
+	toast('Blast Template placed: drag it into place; the models it covers are marked');
+}
 function placeToken(id, x, z, player) {
+	if (id === 'blast') { placeBlast(x, z, player); return; }
 	const k = tokInfo(id); if (!k) return;
 	const baseMm = k.mm || 32, r = baseMm * MM / 2;
 	const spot = findSpotNear(Math.min(state.table.w / 2 - r, Math.max(-state.table.w / 2 + r, x)), Math.min(state.table.d / 2 - r, Math.max(-state.table.d / 2 + r, z)), r);
