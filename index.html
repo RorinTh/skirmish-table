@@ -337,6 +337,7 @@ textarea { font-family: var(--font-mono); font-size: 11.5px; resize: vertical; m
 .die svg { width: 100%; height: 100%; display: block; }
 .die rect { fill: var(--raised); stroke: var(--line); stroke-width: 1.5; }
 .die circle { fill: var(--fg); }
+.die.prec { outline: 2px dashed var(--hit); outline-offset: 1px; border-radius: 6px; }
 .die.hit rect { fill: var(--hit-bg); stroke: var(--hit); }
 .die.hit circle { fill: var(--hit); }
 .die.miss { opacity: .45; }
@@ -779,6 +780,24 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 					<button id="critPlus" aria-label="Raise critical hit">+</button>
 				</div>
 				<span class="note">hits skip armour, against any unit</span>
+			</div>
+			<div class="row" id="precRow">
+				<span class="note">Precision</span>
+				<div class="stepper">
+					<button id="precMinus" aria-label="Lower precision">−</button>
+					<input id="precVal" type="number" min="0" max="9" value="0" aria-label="Precision">
+					<button id="precPlus" aria-label="Raise precision">+</button>
+				</div>
+				<span class="note">misses that count as hits</span>
+			</div>
+			<div class="row" id="toughRow">
+				<span class="note">Tough</span>
+				<div class="stepper">
+					<button id="toughMinus" aria-label="Lower tough">−</button>
+					<input id="toughVal" type="number" min="0" max="9" value="0" aria-label="Tough">
+					<button id="toughPlus" aria-label="Raise tough">+</button>
+				</div>
+				<span class="note">failed saves that count as saved</span>
 			</div>
 			<div class="row">
 				<button class="btn primary" id="rollBtn">Roll</button>
@@ -4365,7 +4384,9 @@ function newRoll() {
 	commitRoll({
 		kind, label: (KIND_LABEL[kind] + (attackPair() ? `: ${attackPair().au.name} → ${attackPair().bu.name}` : '')).slice(0, 80), dice: Array.from({ length: diceCount() }, () => ({ v: d6(), re: false })), target: diceTarget(),
 		surge: kind === 'hit' && dice.surge ? { type: dice.surge, v: dice.surge === 'fixed' ? clampN($('#surgeFixed').value, 0, 30, 1) | 0 : d6() } : null, match: kind === 'hit' && !!dice.surge && dice.surgeMatch,
-		speed: null, carry: kind === 'armour' ? dice.carry : 0, crit: kind === 'hit' ? clampN($('#critVal').value, 0, 30, 0) | 0 : 0
+		speed: null, carry: kind === 'armour' ? dice.carry : 0, crit: kind === 'hit' ? clampN($('#critVal').value, 0, 30, 0) | 0 : 0,
+		prec: kind === 'hit' ? clampN($('#precVal').value, 0, 9, 0) | 0 : 0,
+		tough: kind === 'armour' ? clampN($('#toughVal').value, 0, 9, 0) | 0 : 0
 	});
 	if (kind === 'armour') dice.carry = 0;
 	renderDiceControls();
@@ -4400,7 +4421,7 @@ function normRoll(id, b) {
 		kind: KINDS.includes(b.kind) ? b.kind : 'plain', label: String(b.label || 'Roll').slice(0, 80),
 		dice: b.dice.map(d => ({ v: clampN(d?.v, 1, 6, 1) | 0, re: !!d?.re })), target: clampN(b.target, 0, 6, 0) | 0,
 		surge: s, match: !!b.match && !!s, speed: b.speed == null ? null : clampN(b.speed, 0, 30, 0) | 0, carry: clampN(b.carry, 0, 60, 0) | 0,
-		crit: clampN(b.crit, 0, 30, 0) | 0 };
+		crit: clampN(b.crit, 0, 30, 0) | 0, prec: clampN(b.prec, 0, 9, 0) | 0, tough: clampN(b.tough, 0, 9, 0) | 0 };
 }
 function onRolls(snap) {
 	dice.history = snap.docs.map(d => normRoll(d.id, d.data())).filter(Boolean);
@@ -4409,13 +4430,15 @@ function onRolls(snap) {
 	if (!snap.metadata.fromCache) net.rollsLoaded = true;
 	renderDice();
 }
+// failed dice that count as successes: Precision on a hit roll (hits), Tough on an armour roll (saves)
+const precUsed = r => { const x = r.kind === 'hit' ? r.prec : r.kind === 'armour' ? r.tough : 0; return r.target && x ? Math.min(x, r.dice.filter(d => d.v < r.target).length) : 0; };
 // what a roll means, and the roll it leads to
 function outcome(r) {
-	const n = r.dice.length, t = r.target, ok = t ? r.dice.filter(d => d.v >= t).length : 0;
+	const n = r.dice.length, t = r.target, pu = precUsed(r), ok = (t ? r.dice.filter(d => d.v >= t).length : 0) + pu;
 	if (r.kind === 'hit') {
 		const sv = surgeValue(r.surge), crit = r.crit || 0, moved = Math.min((r.match ? sv : 0) + crit, ok), toArmour = ok - moved;
 		const surge = !r.surge ? '' : (r.surge.type === 'fixed' ? ` · surge ${sv}` : ` · surge ${r.surge.type} = ${sv}`) + (r.match ? '' : ', no tag match so ignored');
-		const skip = (crit ? ` · critical hit ${crit}` : '') + (moved ? ` · ${moved} skip armour` : '');
+		const skip = (pu ? ` · precision ${pu}` : '') + (crit ? ` · critical hit ${crit}` : '') + (moved ? ` · ${moved} skip armour` : '');
 		const next = !ok ? null : toArmour
 			? { kind: 'armour', count: toArmour, carry: moved, label: `Roll ${plural(toArmour, 'armour save')}` + (moved ? ` (${moved} already in the damage pool)` : '') }
 			: { kind: 'evade', count: moved, carry: 0, label: `${plural(moved, 'die')} in the damage pool: roll evades if the target may evade` };
@@ -4423,7 +4446,7 @@ function outcome(r) {
 	}
 	if (r.kind === 'armour') {
 		const failed = n - ok, dmg = failed + r.carry;
-		return { main: `${ok} saved`, sub: `${failed} failed on ${t}+${r.carry ? ` + ${r.carry} from surge` : ''} → ${plural(dmg, 'damage die')}`,
+		return { main: `${ok} saved`, sub: `${failed} failed on ${t}+${pu ? ` (tough ${pu})` : ''}${r.carry ? ` + ${r.carry} from surge` : ''} → ${plural(dmg, 'damage die')}`,
 			next: dmg ? { kind: 'evade', count: dmg, carry: 0, label: `Roll ${plural(dmg, 'evade')} (only if the target may evade)` } : null };
 	}
 	if (r.kind === 'evade') return { main: `${ok} evaded`, sub: `of ${n} on ${t}+ → ${plural(n - ok, 'damage die')} remain`, next: null };
@@ -4446,6 +4469,8 @@ function renderDiceControls() {
 	$('#speedRow').hidden = k !== 'charge';
 	$('#surgeRow').hidden = k !== 'hit';
 	$('#critRow').hidden = k !== 'hit';
+	$('#precRow').hidden = k !== 'hit';
+	$('#toughRow').hidden = k !== 'armour';
 	if (k !== 'hit') $('#weaponRow').hidden = true;
 	$('#surgeMatchWrap').hidden = !dice.surge;
 	$('#surgeFixedWrap').hidden = dice.surge !== 'fixed';
@@ -4611,6 +4636,8 @@ function applyWeapon() {
 	dice.surge = !w.surgeType || w.surgeType === '-' ? '' : ['D3', 'D3+1', 'D6'].includes(sd) ? sd : /^BT$/i.test(sd) ? 'fixed' : '';
 	const cr = /CRITICAL HIT\s*\((\d+)\)/i.exec(String(w.keywords || ''));
 	$('#critVal').value = cr ? cr[1] : 0;
+	const pc = /PRECISION\s*\((\d+)\)/i.exec(String(w.keywords || ''));
+	$('#precVal').value = pc ? Math.min(9, +pc[1]) : 0;
 	const pr = attackPair();
 	if (pr?.bc && dice.surge) { dice.surgeMatch = surgeMatches(w, pr.bc); $('#surgeMatch').checked = dice.surgeMatch; }
 	renderDiceControls();
@@ -4639,6 +4666,10 @@ function fillDefence() {
 	const x = /(\d)\+?/.exec(String(sc.c.stats?.[k] ?? ''));
 	if (x) { $('#diceTarget').value = String(Math.min(6, Math.max(2, +x[1]))); renderDiceControls(); }
 }
+$('#toughMinus').addEventListener('click', () => { $('#toughVal').value = Math.max(0, (clampN($('#toughVal').value, 0, 9, 0) | 0) - 1); });
+$('#toughPlus').addEventListener('click', () => { $('#toughVal').value = Math.min(9, (clampN($('#toughVal').value, 0, 9, 0) | 0) + 1); });
+$('#precMinus').addEventListener('click', () => { $('#precVal').value = Math.max(0, (clampN($('#precVal').value, 0, 9, 0) | 0) - 1); });
+$('#precPlus').addEventListener('click', () => { $('#precVal').value = Math.min(9, (clampN($('#precVal').value, 0, 9, 0) | 0) + 1); });
 $('#critMinus').addEventListener('click', () => { $('#critVal').value = Math.max(0, (clampN($('#critVal').value, 0, 30, 0) | 0) - 1); });
 $('#critPlus').addEventListener('click', () => { $('#critVal').value = Math.min(30, (clampN($('#critVal').value, 0, 30, 0) | 0) + 1); });
 $('#surgeFixedMinus').addEventListener('click', () => { $('#surgeFixed').value = Math.max(0, (clampN($('#surgeFixed').value, 0, 30, 1) | 0) - 1); });
@@ -4658,9 +4689,11 @@ function renderDice() {
 	const r = dice.cur, list = r?.dice || [];
 	const t = r ? r.target : 0;
 	const shown = $('#diceSort').checked ? [...list].sort((a, b) => b.v - a.v) : list;
+	const precSet = new Set();
+	if (r && precUsed(r)) [...list].filter(d => d.v < t).sort((a, b) => b.v - a.v).slice(0, precUsed(r)).forEach(d => precSet.add(d));
 	const surgeDie = r?.surge && r.surge.type !== 'fixed' ? `<span class="die surge ${dice.fresh ? 'tumble' : ''}" title="Surge die ${r.surge.v}${r.surge.type !== 'D6' ? ' = ' + r.surge.type + ' ' + surgeValue(r.surge) : ''}">${dieSvg(r.surge.v)}</span>` : '';
 	$('#diceField').innerHTML = list.length
-		? shown.map((d, i) => `<span class="die ${t ? (d.v >= t ? 'hit' : 'miss') : ''} ${d.re ? 're' : ''} ${dice.fresh ? 'tumble' : ''}" style="animation-delay:${Math.min(i, 30) * 12}ms" title="${d.v}${d.re ? ' (rerolled)' : ''}">${dieSvg(d.v)}</span>`).join('') + surgeDie
+		? shown.map((d, i) => `<span class="die ${t ? (d.v >= t || precSet.has(d) ? 'hit' : 'miss') : ''} ${precSet.has(d) ? 'prec' : ''} ${d.re ? 're' : ''} ${dice.fresh ? 'tumble' : ''}" style="animation-delay:${Math.min(i, 30) * 12}ms" title="${d.v}${d.re ? ' (rerolled)' : ''}">${dieSvg(d.v)}</span>`).join('') + surgeDie
 		: '<span class="empty">Press Roll, or hit Enter in the dice count.</span>';
 	dice.fresh = false;
 	if (r) {
@@ -4677,7 +4710,7 @@ function renderDice() {
 		const o = outcome(h);
 		const time = new Date(h.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 		const col = h.seat === 0 || h.seat === 1 ? state.players[h.seat].color : 'transparent';
-		const what = h.kind === 'charge' ? `Charge, Speed ${h.speed}` : `${esc(h.label)} ${h.dice.length}D6${h.target ? ' ' + h.target + '+' : ''}${h.surge ? ' + surge ' + (h.surge.type === 'fixed' ? h.surge.v : h.surge.type) : ''}${h.crit ? ' + crit ' + h.crit : ''}`;
+		const what = h.kind === 'charge' ? `Charge, Speed ${h.speed}` : `${esc(h.label)} ${h.dice.length}D6${h.target ? ' ' + h.target + '+' : ''}${h.surge ? ' + surge ' + (h.surge.type === 'fixed' ? h.surge.v : h.surge.type) : ''}${h.prec ? ' + precision ' + h.prec : ''}${h.tough ? ' + tough ' + h.tough : ''}${h.crit ? ' + crit ' + h.crit : ''}`;
 		return `<li><span><span class="swatch" style="background:${col};display:inline-block"></span> ${time} <b>${esc(h.name)}</b> ${what} → <b>${esc(o.main)}</b></span><span>${h.dice.map(d => d.v).sort((a, b) => b - a).join(' ')}${h.surge ? ' | S' + h.surge.v : ''}</span></li>`;
 	}).join('');
 }
