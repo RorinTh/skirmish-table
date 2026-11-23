@@ -154,6 +154,11 @@ a.rulesite { color: var(--fg); text-decoration: none; display: inline-block; }
 .seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px; }
 .seg button { border: 0; background: transparent; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; gap: 6px; align-items: center; }
 .seg button:hover { background: var(--raised); }
+#weaponRow { flex-direction: column; align-items: stretch; gap: 4px; }
+.seg.weapons { flex-wrap: wrap; min-width: 0; }
+.seg.weapons button { flex: 1 1 auto; }
+.seg.weapons button { flex-direction: column; align-items: flex-start; gap: 0; text-align: left; line-height: 1.2; }
+.seg.weapons small { font-size: 11px; opacity: .8; font-weight: 400; }
 .seg button[aria-pressed="true"] { background: var(--tape); color: var(--tape-ink); font-weight: 600; }
 kbd { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
 .seg button[aria-pressed="true"] kbd { color: var(--tape-ink); border-color: var(--tape-ink); }
@@ -660,9 +665,11 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 				<button type="button" data-k="charge" aria-pressed="false">Charge</button>
 				<button type="button" data-k="plain" aria-pressed="false">Other</button>
 			</div>
+			<div class="row note" id="attackRow" hidden></div>
 			<div class="row" id="weaponRow" hidden>
 				<span class="note">Weapon</span>
-				<select id="diceWeapon" aria-label="Weapon of the selected unit" style="flex:1;min-width:0"></select>
+				<select id="diceWeapon" aria-label="Weapon of the selected unit" hidden></select>
+				<div class="seg weapons" role="group" aria-label="Weapon" id="weaponPick"></div>
 			</div>
 			<div class="row" id="poolRow">
 				<div class="stepper">
@@ -2780,7 +2787,7 @@ function bindUnitRow(m) {
 	$('#cardOpen')?.addEventListener('click', () => openCard(findUnit(m.unit)?.card));
 }
 function renderCard() {
-	queueMicrotask(() => { try { renderWeapons(); fillDefence(); } catch { } });
+	queueMicrotask(() => { try { renderAttack(); renderWeapons(); fillDefence(); } catch { } });
 	if (!sel) { cardEl.innerHTML = '<p class="note">Click a model or a terrain piece to see it here. Shift+click or Shift+drag selects several models.</p>'; return; }
 	if (multi.size > 1) {
 		const ms = selectedMinis(), unitIds = new Set(ms.map(m => m.unit)), mixed = new Set(ms.map(m => m.player)).size > 1;
@@ -3989,7 +3996,7 @@ function newRoll() {
 	const kind = dice.kind;
 	if (kind === 'charge') { commitRoll({ kind, label: KIND_LABEL.charge, dice: [{ v: d6(), re: false }], target: 0, surge: null, match: false, speed: diceSpeed(), carry: 0 }); return; }
 	commitRoll({
-		kind, label: KIND_LABEL[kind], dice: Array.from({ length: diceCount() }, () => ({ v: d6(), re: false })), target: diceTarget(),
+		kind, label: (KIND_LABEL[kind] + (attackPair() ? `: ${attackPair().au.name} → ${attackPair().bu.name}` : '')).slice(0, 80), dice: Array.from({ length: diceCount() }, () => ({ v: d6(), re: false })), target: diceTarget(),
 		surge: kind === 'hit' && dice.surge ? { type: dice.surge, v: d6() } : null, match: kind === 'hit' && !!dice.surge && dice.surgeMatch,
 		speed: null, carry: kind === 'armour' ? dice.carry : 0
 	});
@@ -4022,7 +4029,7 @@ function normRoll(id, b) {
 	if (!b || !Array.isArray(b.dice) || !b.dice.length || b.dice.length > 60) return null;
 	const s = b.surge && (b.surge.type === 'D3' || b.surge.type === 'D3+1' || b.surge.type === 'D6') ? { type: b.surge.type, v: clampN(b.surge.v, 1, 6, 1) | 0 } : null;
 	return { id, ts: Number(b.ts) || 0, seat: b.seat === 0 || b.seat === 1 ? b.seat : 2, name: String(b.name || 'Someone').slice(0, 24),
-		kind: KINDS.includes(b.kind) ? b.kind : 'plain', label: String(b.label || 'Roll').slice(0, 30),
+		kind: KINDS.includes(b.kind) ? b.kind : 'plain', label: String(b.label || 'Roll').slice(0, 80),
 		dice: b.dice.map(d => ({ v: clampN(d?.v, 1, 6, 1) | 0, re: !!d?.re })), target: clampN(b.target, 0, 6, 0) | 0,
 		surge: s, match: !!b.match && !!s, speed: b.speed == null ? null : clampN(b.speed, 0, 30, 0) | 0, carry: clampN(b.carry, 0, 60, 0) | 0 };
 }
@@ -4077,12 +4084,38 @@ function renderDiceControls() {
 	$('#carryNote').textContent = k === 'armour' && dice.carry ? `+ ${plural(dice.carry, 'surge die')} already in the damage pool` : '';
 }
 // the selected unit's card can fill in its Armour, Evade or Speed
-function selectedCard() { const m = sel?.kind === 'mini' ? findMini(sel.id) : null; return m ? { m, c: libCard(findUnit(m.unit)?.card) } : null; }
+function attackPair() {
+	if (sel?.kind !== 'mini' || multi.size < 2) return null;
+	const ms = [...multi].map(findMini).filter(m => m && !m.tok), a = ms[0];
+	if (!a) return null;
+	const b = ms.find(m => m.unit !== a.unit);
+	if (!b || ms.some(m => m.unit !== a.unit && m.unit !== b.unit)) return null;   // exactly two units
+	const au = findUnit(a.unit), bu = findUnit(b.unit);
+	return au && bu ? { a, b, au, bu, ac: libCard(au.card), bc: libCard(bu.card) } : null;
+}
+// the card the dice read: the selected unit's, or in an attack the attacker's ('atk') or the target's ('def')
+function selectedCard(role = 'atk') {
+	const pr = attackPair();
+	if (pr) return role === 'def' ? { m: pr.b, c: pr.bc } : { m: pr.a, c: pr.ac };
+	const m = sel?.kind === 'mini' ? findMini(sel.id) : null; return m ? { m, c: libCard(findUnit(m.unit)?.card) } : null;
+}
+const tagKey = t => String(t || '').trim().toLowerCase().replace(/^armored$/, 'armoured');
+function surgeMatches(w, c) {
+	const tags = new Set((c?.combatTags || []).map(tagKey));
+	return String(w?.surgeType || '').split(',').map(tagKey).some(t => t && t !== '-' && tags.has(t));
+}
+function renderAttack() {
+	const pr = attackPair(), P = state.players;
+	$('#attackRow').hidden = !pr;
+	if (!pr) return;
+	const who = (m, u) => `<span class="swatch" style="background:${P[m.player].color};display:inline-block"></span> <b>${esc(u.name)}</b>`;
+	$('#attackRow').innerHTML = `<span>Attack: ${who(pr.a, pr.au)} → ${who(pr.b, pr.bu)}${pr.bc?.combatTags?.length ? ` <span>(${esc(pr.bc.combatTags.join(', '))})</span>` : ''}</span>`;
+}
 function setKind(k, fromCard = true) {
 	dice.kind = k;
 	if (k !== 'armour') dice.carry = 0;
 	if (k === 'hit') renderWeapons(true);
-	const sc = fromCard ? selectedCard() : null;
+	const sc = fromCard ? selectedCard(k === 'armour' || k === 'evade' ? 'def' : 'atk') : null;
 	if (sc?.c) {
 		const num = v => { const x = /(\d)\+?/.exec(String(v ?? '')); return x ? +x[1] : null; };
 		if (k === 'armour' && num(sc.c.stats.armour)) $('#diceTarget').value = String(Math.min(6, Math.max(2, num(sc.c.stats.armour))));
@@ -4109,7 +4142,7 @@ function renderWeapons(force) {
 	$('#weaponRow').hidden = dice.kind !== 'hit' || !uw?.ws.length;
 	if (!uw?.ws.length) { weaponSig = ''; return; }
 	if (dice.kind !== 'hit') return;
-	const alive = aliveModels(uw.u).length || 1, sig = uw.u.id + '|' + uw.c.id + '|' + alive;
+	const alive = aliveModels(uw.u).length || 1, sig = uw.u.id + '|' + uw.c.id + '|' + alive + '|' + (attackPair()?.bu.id || '');
 	if (sig === weaponSig && !force) return;
 	const keep = weaponSig.split('|')[0] === uw.u.id ? $('#diceWeapon').value : null;
 	weaponSig = sig;
@@ -4117,6 +4150,10 @@ function renderWeapons(force) {
 	$('#diceWeapon').innerHTML = uw.ws.map((w, i) => `<option value="${i}">${esc(w.name)} · ${esc(w.phase || '')} · RoA ${esc(w.roa)} × ${alive} · ${esc(w.hit)}`
 		+ `${has(w.surgeDice) ? ' · surge ' + esc(w.surgeDice) : ''}${w.upgrade ? ' (upgrade)' : ''}</option>`).join('') + '<option value="">By hand</option>';
 	$('#diceWeapon').value = keep !== null && $('#diceWeapon').querySelector(`option[value="${keep}"]`) ? keep : '0';
+	$('#weaponPick').innerHTML = uw.ws.map((w, i) => `<button type="button" data-w="${i}" title="${esc(w.name)}${w.phase ? ' · ' + esc(w.phase) : ''}${has(w.keywords) ? ' · ' + esc(w.keywords) : ''}"><b>${esc(w.name)}</b>`
+		+ `<small>${esc(w.phase || '')} · RoA ${esc(w.roa)}×${alive} · ${esc(w.hit)}${has(w.surgeDice) ? ' · ' + esc(w.surgeDice) : ''}${w.upgrade ? ' · upgrade' : ''}</small></button>`).join('')
+		+ '<button type="button" data-w=""><b>By hand</b><small>set the dice yourself</small></button>';
+	markWeapon();
 	applyWeapon();
 }
 function applyWeapon() {
@@ -4127,9 +4164,13 @@ function applyWeapon() {
 	if (hit) $('#diceTarget').value = String(Math.min(6, Math.max(2, +hit[1])));
 	const sd = String(w.surgeDice || '').trim();
 	dice.surge = ['D3', 'D3+1', 'D6'].includes(sd) && w.surgeType && w.surgeType !== '-' ? sd : '';
+	const pr = attackPair();
+	if (pr?.bc && dice.surge) { dice.surgeMatch = surgeMatches(w, pr.bc); $('#surgeMatch').checked = dice.surgeMatch; }
 	renderDiceControls();
 }
-$('#diceWeapon').addEventListener('change', applyWeapon);
+function markWeapon() { const v = $('#diceWeapon').value; $('#weaponPick').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.w === v)); }
+$('#diceWeapon').addEventListener('change', () => { markWeapon(); applyWeapon(); });
+$('#weaponPick').addEventListener('click', e => { const b = e.target.closest('button[data-w]'); if (!b) return; $('#diceWeapon').value = b.dataset.w; markWeapon(); applyWeapon(); });
 function carryFromLast(k) {
 	const nx = dice.cur && outcome(dice.cur).next;
 	return nx && nx.kind === k ? nx : null;   // a hit roll whose hits all skipped armour goes straight to Evade
@@ -4143,7 +4184,7 @@ $('#kindPick').addEventListener('click', e => {
 // in Armour or Evade, selecting a unit fills in its Armour or Evade value from its card
 let defSig = '';
 function fillDefence() {
-	const k = dice.kind, sc = (k === 'armour' || k === 'evade') ? selectedCard() : null;
+	const k = dice.kind, sc = (k === 'armour' || k === 'evade') ? selectedCard('def') : null;
 	if (!sc?.c) { defSig = ''; return; }
 	const sig = sc.m.unit + '|' + k;
 	if (sig === defSig) return;
