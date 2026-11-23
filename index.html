@@ -2780,7 +2780,7 @@ function bindUnitRow(m) {
 	$('#cardOpen')?.addEventListener('click', () => openCard(findUnit(m.unit)?.card));
 }
 function renderCard() {
-	queueMicrotask(() => { try { renderWeapons(); } catch { } });
+	queueMicrotask(() => { try { renderWeapons(); fillDefence(); } catch { } });
 	if (!sel) { cardEl.innerHTML = '<p class="note">Click a model or a terrain piece to see it here. Shift+click or Shift+drag selects several models.</p>'; return; }
 	if (multi.size > 1) {
 		const ms = selectedMinis(), unitIds = new Set(ms.map(m => m.unit)), mixed = new Set(ms.map(m => m.player)).size > 1;
@@ -4130,7 +4130,27 @@ function applyWeapon() {
 	renderDiceControls();
 }
 $('#diceWeapon').addEventListener('change', applyWeapon);
-$('#kindPick').addEventListener('click', e => { const b = e.target.closest('button[data-k]'); if (b) setKind(b.dataset.k); });
+function carryFromLast(k) {
+	const nx = dice.cur && outcome(dice.cur).next;
+	return nx && nx.kind === k ? nx : null;   // a hit roll whose hits all skipped armour goes straight to Evade
+}
+$('#kindPick').addEventListener('click', e => {
+	const b = e.target.closest('button[data-k]'); if (!b) return;
+	const k = b.dataset.k, nx = (k === 'armour' || k === 'evade') && dice.kind !== k ? carryFromLast(k) : null;
+	setKind(k);
+	if (nx) { $('#diceCount').value = Math.max(1, nx.count); dice.carry = nx.carry; renderDiceControls(); }
+});
+// in Armour or Evade, selecting a unit fills in its Armour or Evade value from its card
+let defSig = '';
+function fillDefence() {
+	const k = dice.kind, sc = (k === 'armour' || k === 'evade') ? selectedCard() : null;
+	if (!sc?.c) { defSig = ''; return; }
+	const sig = sc.m.unit + '|' + k;
+	if (sig === defSig) return;
+	defSig = sig;
+	const x = /(\d)\+?/.exec(String(sc.c.stats?.[k] ?? ''));
+	if (x) { $('#diceTarget').value = String(Math.min(6, Math.max(2, +x[1]))); renderDiceControls(); }
+}
 $('#surgePick').addEventListener('click', e => { const b = e.target.closest('button[data-s]'); if (!b) return; dice.surge = b.dataset.s; renderDiceControls(); });
 $('#surgeMatch').addEventListener('change', e => { dice.surgeMatch = e.target.checked; });
 $('#diceNext').addEventListener('click', () => {

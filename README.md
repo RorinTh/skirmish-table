@@ -30,7 +30,7 @@ Under **Import army list**, the list **Or an example army from the rulebook** ho
 
 ## Dice from the selected unit
 
-With the card library loaded and a model selected, a Hit roll shows a **Weapon** list with the unit's weapons from its card. Picking one fills in the dice: its RoA times the unit's models still alive, its Hit value and its surge die (D3, D3+1 or D6). Selecting another unit, or the unit losing a model, fills them in again. A Blast Template weapon (RoA BT+4) starts at 5 dice; change it by hand as needed. Choose **By hand** to set the dice yourself.
+With the card library loaded and a model selected, a Hit roll shows a **Weapon** list with the unit's weapons from its card. Picking one fills in the dice: its RoA times the unit's models still alive, its Hit value and its surge die (D3, D3+1 or D6). Selecting another unit, or the unit losing a model, fills them in again. In **Armour** or **Evade**, selecting a unit fills in its Armour or Evade value from its card. Switching to **Armour** after a hit roll takes its hits minus the surge hits that skip armour (those wait in the damage pool); switching to **Evade** after an armour roll takes its failed saves plus those surge hits. A Blast Template weapon (RoA BT+4) starts at 5 dice; change it by hand as needed. Choose **By hand** to set the dice yourself.
 
 ## Online play
 
