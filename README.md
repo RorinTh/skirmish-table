@@ -6,11 +6,18 @@ A browser table for playing a tabletop miniatures skirmish game on one screen: a
 
 There is nothing to build or install: `index.html` is the game, and `p2p.js` adds online play. Your board is saved in your browser.
 
+## A new game
+
+A new game starts with two of the rulebook's 1000 Minerals example armies in the reserves: Raynor's Raiders for Player 1 and Kerrigan's Swarm for Player 2, with their Faction and Tactical cards, on the **Abandoned Camp** deployment with the **Frontlines** mission. With the card library loaded they get their bases, portraits and specialists; without it they wait on 32 mm bases. Import your own lists in Setup (tick *Remove this player's models first*), or **Load example** under Save & load to start over.
+
 ## Setup and Play
 
 **Setup** (top left) walks through four steps: the table and deployment, both armies (import a list or pick an example army; a custom unit is folded away below), terrain, and **Play here** or **Play online**. **Play** keeps the units on the table, the unit cards and the rules on the left; the dice and the selected model stay on the right. The buttons on the board's edges (or the **[** and **]** keys) fold either side panel away to give the board room. **?** at the top lists every control and shortcut.
 
 ## Moving and placing
+
+Hold **W** with a model (or a Mission Marker) selected for *Wholly Within* distances: **WHOLLY WITHIN** shows over it, and every distance runs to the far edge of the other bases instead of the near edge; for a unit, its farthest model is the one labelled.
+
 
 A model's base may hang off the table or overlap another model, but it gets a red edge while it does and a message when it is put down. Hold **Ctrl** while dragging to keep it wholly on the table and against, not on, other bases (Ctrl+click still adds a model to the selection). The models that follow a unit's leader in coherency are always placed wholly on the table and clear of other bases.
 

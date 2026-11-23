@@ -191,6 +191,8 @@ a.rulesite { color: var(--fg); text-decoration: none; display: inline-block; }
 .tag.quarter b { color: var(--muted); margin-right: 4px; }
 .tag.qtag { background: transparent; color: var(--fg); font-size: 10.5px; padding: 0 3px; transform-origin: top; text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 5px var(--bg); }
 .tag.qtag.none { color: var(--muted); font-style: italic; }
+.tag.wholly { background: var(--tape); color: var(--tape-ink); font-family: var(--font-display); font-weight: 700; font-size: 11.5px; letter-spacing: .08em; padding: 1px 7px; }
+.tag.dist.far { color: var(--tape); }
 .tag.measure { background: var(--tape); color: var(--tape-ink); }
 .tag.move { background: var(--raised); color: var(--fg); border: 1px solid var(--line); }
 .tag.move.warn { border-color: var(--danger); color: var(--danger); }
@@ -649,7 +651,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 		</section>
 			<section class="box">
 				<h2>On the table</h2>
-				<p class="note" id="exampleNote" hidden>These are example bases so the board is not empty. Rename them, give them portraits, or clear them under Save &amp; load in Setup.</p>
+				<p class="note" id="exampleNote" hidden>Two of the rulebook's example armies wait in the reserves. Import your own lists in Setup (tick “Remove this player's models first”), or clear the table under Save &amp; load.</p>
 				<div id="unitList"></div>
 			</section>
 			<section class="box st-setup">
@@ -936,36 +938,30 @@ let state;
 const net = { db: null, roomNS: null, nroom: null, code: null, seat: 0, checked: false, loaded: false, metaLoaded: false, rollsLoaded: false, readOnly: false,
 	synced: new Map(), metaSynced: '', createdAt: 0, unsubs: [], peers: [], rd: new Map(), status: '', busy: false, again: false };
 function exampleState() {
-	const minis = [], units = [];
-	let n = 0;
-	const unit = (id, name, player, supply) => units.push({ id, name, player, supply });
-	const add = (name, player, baseMm, x, z, u) => minis.push({ id: 'm' + (++n), name, player, baseMm, img: null, x, z, unit: u });
-	// deployed along the long edges of a 54″ × 36″ table (z = ±18); supply values are examples
-	unit('u1', 'Commander', 0, 2); unit('u2', 'Troopers', 0, 3); unit('u3', 'Walker', 0, 4);
-	unit('u4', 'Pack Leader', 1, 2); unit('u5', 'Hunters', 1, 3); unit('u6', 'Brute', 1, 3);
-	add('Commander', 0, 40, -5, 15.5, 'u1');
-	for (let i = 0; i < 4; i++) add('Trooper ' + (i + 1), 0, 25, -11 + i * 1.3, 17, 'u2');
-	add('Walker', 0, 60, 4, 15.5, 'u3');
-	add('Pack Leader', 1, 40, 6, -15.5, 'u4');
-	for (let i = 0; i < 5; i++) add('Hunter ' + (i + 1), 1, 25, 1 + i * 1.3, -17, 'u5');
-	add('Brute', 1, 50, -5, -15.5, 'u6');
+	const units = [], minis = [], tactics = [];
+	for (const [name, player] of [["Raynor's Raiders (Founders Edition)", 0], ["Kerrigan's Swarm (Founders Edition)", 1]]) {
+		const a = EXAMPLE_ARMIES.find(x => x.name === name); if (!a) continue;
+		const list = parseArmyList(exampleArmyText(a)), made = armyPieces(planArmy(list), player);
+		units.push(...made.units); minis.push(...made.minis);
+		tactics.push(...list.cards.map(n => tacticFrom(n, player, list.faction)));
+	}
 	return {
-		v: 1, example: true, nextId: 100, unit: 'in', ranges: '3, 6, 12', showRanges: false,
-		table: { w: TABLE_W, d: TABLE_D, grid: false, mat: 'plain', lockTerrain: false },
+		v: 2, example: true, nextId: 100, unit: 'in', ranges: '3, 6, 12', showRanges: false,
+		table: { w: 36, d: 36, grid: false, mat: 'plain', lockTerrain: false, deploy: 'abandoned-camp', mission: 'Frontlines · Skirmish Level' },
 		score: normScore(null),
 		players: [{ name: 'Player 1', color: '#4c9dff' }, { name: 'Player 2', color: '#ff6250' }],
-		units, minis,
+		units, minis, tactics,
 		terrain: [
-			{ id: 't1', w: 6, d: 4, h: 3, x: -9, z: 1, rot: 0.35 },
-			{ id: 't2', w: 4, d: 4, h: 2, x: 11, z: 5, rot: 0 },
-			{ id: 't3', w: 8, d: 1.5, h: 4, x: 3, z: -7, rot: -0.5 },
-			{ id: 't4', w: 7, d: 5, h: 0.1, x: 2, z: 9, rot: 0.2 }
+			{ id: 't1', w: 6, d: 4, h: 3, x: -7, z: 5, rot: 0.35 },
+			{ id: 't2', w: 4, d: 4, h: 2, x: 8, z: -5, rot: 0 },
+			{ id: 't3', w: 8, d: 1.5, h: 4, x: -1, z: -6, rot: -0.5 },
+			{ id: 't4', w: 7, d: 5, h: 0.1, x: 4, z: 6, rot: 0.2 }
 		]
 	};
 }
 function normalize(s) {
-	const ex = exampleState();
-	s = s && typeof s === 'object' ? s : ex;
+	const ex = { ranges: '3, 6, 12', table: { w: 36, d: 36, mat: 'plain' }, players: [{ name: 'Player 1', color: '#4c9dff' }, { name: 'Player 2', color: '#ff6250' }] };
+	s = s && typeof s === 'object' ? s : exampleState();
 	return {
 		v: 2, example: !!s.example, nextId: Number(s.nextId) || 1000,
 		unit: s.unit === 'cm' ? 'cm' : 'in',
@@ -2274,6 +2270,11 @@ function selectMarker(n) {
 	for (const [k, v] of markerViz) v.selRing.visible = String(k) === String(n);
 }
 let hoverId = null;   // the model under the pointer: its distance shows too
+let wholly = false;   // W held: distances to the far edge of each base (Wholly Within)
+addEventListener('keydown', e => { if ((e.key === 'w' || e.key === 'W') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest?.('input, textarea, select, [contenteditable]')) wholly = true; });
+addEventListener('keyup', e => { if (e.key === 'w' || e.key === 'W') wholly = false; });
+addEventListener('blur', () => { wholly = false; });
+const whollyLabel = makeLabel('wholly');
 function updateDistances() {
 	const s = sel?.kind === 'mini' ? findMini(sel.id) : null;
 	const seen = new Set();
@@ -2284,7 +2285,7 @@ function updateDistances() {
 			seen.add(m.id);
 			let L = distLabels.get(m.id);
 			if (!L) { L = makeLabel('dist'); distLabels.set(m.id, L); }
-			const mp = shownAt(m), r = radius(m), txt = fmt(Math.max(0, Math.hypot(mp.x - mk.px, mp.z - mk.pz) - MARKER_R - r));
+			const mp = shownAt(m), r = radius(m), dc = Math.hypot(mp.x - mk.px, mp.z - mk.pz), txt = fmt(Math.max(0, wholly ? dc + r - MARKER_R : dc - MARKER_R - r));
 			if (L.text !== txt) { L.text = txt; L.el.textContent = txt; }
 			const fs = Math.round(Math.min(20, Math.max(9, 2 * r * pxPerIn * 0.3)));
 			if (L.fs !== fs) { L.fs = fs; L.el.style.fontSize = fs + 'px'; }
@@ -2297,7 +2298,9 @@ function updateDistances() {
 		const rs = radius(s), sp = shownAt(s), near = new Map();
 		for (const m of state.minis) {
 			if (m.id === s.id || m.reserve || m.unit === s.unit) continue;
-			const mp = shownAt(m), dd = Math.hypot(mp.x - sp.x, mp.z - sp.z) - radius(m), k = m.tok ? m.id : m.unit;
+			const mp = shownAt(m), dc = Math.hypot(mp.x - sp.x, mp.z - sp.z), k = m.tok ? m.id : m.unit;
+			// the unit's nearest model; holding W, its farthest (the whole unit must be within)
+			const dd = wholly ? -(dc + radius(m)) : dc - radius(m);
 			if (!near.has(k) || dd < near.get(k).d) near.set(k, { id: m.id, d: dd });
 		}
 		const show = new Set([...near.values()].map(v => v.id));
@@ -2307,7 +2310,7 @@ function updateDistances() {
 			seen.add(m.id);
 			let L = distLabels.get(m.id);
 			if (!L) { L = makeLabel('dist'); distLabels.set(m.id, L); }
-			const mp = shownAt(m), r = radius(m), txt = fmt(Math.max(0, Math.hypot(mp.x - sp.x, mp.z - sp.z) - rs - r));
+			const mp = shownAt(m), r = radius(m), dc = Math.hypot(mp.x - sp.x, mp.z - sp.z), txt = fmt(Math.max(0, wholly ? dc + r - rs : dc - rs - r));
 			if (L.text !== txt) { L.text = txt; L.el.textContent = txt; }
 			// text sits inside the base, sized to the base's width on screen
 			const fs = Math.round(Math.min(20, Math.max(9, 2 * r * pxPerIn * 0.3)));
@@ -2333,6 +2336,11 @@ function updateDistances() {
 		}
 	}
 	for (const [id, L] of distLabels) if (!seen.has(id)) { dropLabel(L); distLabels.delete(id); }
+	// the tag over what is measured from, while W is held
+	const at = s && !s.reserve ? (() => { const p = shownAt(s); return { x: p.x, z: p.z - radius(s) - 0.15 }; })() : mk ? { x: mk.px, z: mk.pz - MARKER_R - 0.15 } : null;
+	whollyLabel.on = wholly && !!at;
+	if (whollyLabel.on) { if (whollyLabel.el.textContent !== 'WHOLLY WITHIN') whollyLabel.el.textContent = 'WHOLLY WITHIN'; whollyLabel.pos.set(at.x, 0.3, at.z); }
+	for (const L of distLabels.values()) L.el.classList.toggle('far', wholly);
 }
 // the models a Blast Template covers: any base it reaches, even partly (8.7.6)
 function blastCovered(s) {
@@ -4043,6 +4051,24 @@ function addUnitToTable({ name, player, baseMm, count, supply, img, card }) {
 	renderLists(); save();
 	toast(`Added ${count} × ${esc(name)} to ${esc(state.players[player].name)}’s reserves. Drag them onto the table from the Reserves box.`);
 }
+// an army's units and models, all in the reserves: bases and portraits from the cards, one model per SPECIALIST upgrade
+function armyPieces(plan, player) {
+	const units = [], minis = [];
+	for (const u of plan) {
+		const unit = newId('u');
+		units.push({ id: unit, name: u.name, player, supply: u.supply, card: u.card?.id || null, upgrades: u.upgrades, listed: true });
+		let n = 0;
+		const made = [];
+		for (const mt of u.models) for (let i = 0; i < mt.count; i++) {
+			const c = mt.card || u.card, baseMm = c?.baseMm || 32;
+			made.push({ id: newId('m'), name: (u.total > 1 ? `${mt.name} ${++n}` : mt.name).slice(0, 40), player, baseMm, img: c?.portrait || null, x: 0, z: 0, unit, reserve: true, spec: null });
+		}
+		const specs = (u.card?.weapons || []).filter(w => w?.upgrade && /SPECIALIST/i.test(w.keywords || '') && u.upgrades.some(x => cardKey(x) === cardKey(w.name)));
+		specs.forEach((w, k) => { const m = made[made.length - 1 - k]; if (m && made.length > 1) { m.spec = w.name.slice(0, 40); m.name = `${m.name} (${w.name})`.slice(0, 40); } });
+		minis.push(...made);
+	}
+	return { units, minis };
+}
 // ---- army list import (New Recruit text export)
 // "## Core [...]" style section headings; a unit line "Zealots [200 Minerals, -2 Core]: Upgrade [10 Minerals], ..."
 // followed by model lines "• 3x Zealot". A unit with no model lines (a hero) is one model. Pre-Game, Faction and
@@ -4186,21 +4212,9 @@ $('#listAdd').addEventListener('click', () => {
 		state.minis = state.minis.filter(m => m.player !== player);
 		select(null); sendMoves();
 	}
-	const ids = [];
-	for (const u of plan) {
-		const unit = newId('u');
-		state.units.push(normUnit({ id: unit, name: u.name, player, supply: u.supply, card: u.card?.id || null, upgrades: u.upgrades, listed: true }));
-		let n = 0;
-		const made = [];
-		for (const mt of u.models) for (let i = 0; i < mt.count; i++) {
-			const c = mt.card || u.card, baseMm = c?.baseMm || 32;
-			const m = { id: newId('m'), name: (u.total > 1 ? `${mt.name} ${++n}` : mt.name).slice(0, 40), player, baseMm, img: c?.portrait || null, x: 0, z: 0, unit, reserve: true, spec: null };
-			made.push(m);
-		}
-		const specs = (u.card?.weapons || []).filter(w => w?.upgrade && /SPECIALIST/i.test(w.keywords || '') && u.upgrades.some(x => cardKey(x) === cardKey(w.name)));
-		specs.forEach((w, k) => { const m = made[made.length - 1 - k]; if (m && made.length > 1) { m.spec = w.name.slice(0, 40); m.name = `${m.name} (${w.name})`.slice(0, 40); } });
-		for (const m of made) { state.minis.push(m); addMiniObj(m); ids.push(m.id); }
-	}
+	const ids = [], made = armyPieces(plan, player);
+	state.units.push(...made.units.map(normUnit));
+	for (const m of made.minis) { state.minis.push(m); addMiniObj(m); ids.push(m.id); }
 	// the list's Faction and Tactical cards replace this player's cards in the tracker
 	if (list.cards.length) {
 		state.tactics = state.tactics.filter(t => t.player !== player).concat(list.cards.map(n => tacticFrom(n, player, list.faction)));
@@ -4283,6 +4297,7 @@ $('#helpBtn').addEventListener('click', () => openViewer('How to use the table',
 	<h4>Moving</h4>
 	<ul><li>Drag a base: its unit follows in coherency (<b>Alt</b>+drag moves it alone). Drag again to add a leg.</li>
 	<li><b>Enter</b> confirms a move, <b>Shift+Enter</b> confirms all, <b>Esc</b> cancels, <b>Backspace</b> drops the last leg.</li>
+	<li>Hold <b>W</b> with a model or Mission Marker selected for <b>Wholly Within</b> distances: to the far edge of each base, and for a unit its farthest model.</li>
 	<li>A red edge means a base is off the table or on another base. Hold <b>Ctrl</b> while dragging to keep it clear of both.</li></ul>
 	<h4>Selecting and attacking</h4>
 	<ul><li><b>Shift</b>+click or <b>Shift</b>+drag selects several models. Select your unit, then <b>Ctrl</b>+click an enemy: its weapons show above the table and in the dice box.</li>
@@ -4495,7 +4510,7 @@ function loadFromText(txt) {
 $('#loadText').addEventListener('click', () => loadFromText($('#stateText').value));
 $('#loadFile').addEventListener('change', async e => { const f = e.target.files[0]; if (f) loadFromText(await f.text()); e.target.value = ''; });
 armed($('#clearTable'), () => { clearMoves(); state.minis.forEach(m => removeObj(m.id)); state.terrain.forEach(t => removeObj(t.id)); state.minis = []; state.terrain = []; state.example = false; undoStack.length = 0; held.clear(); select(null); measure = null; updateMeasure(); renderLists(); save(); toast('Table cleared'); });
-armed($('#resetExample'), () => { applyState(exampleState()); save(); toast('Example board loaded'); });
+armed($('#resetExample'), () => { applyState(exampleState()); save(); toast("Example game loaded: Raynor's Raiders against Kerrigan's Swarm on Abandoned Camp, Frontlines"); });
 
 // ---------------------------------------------------------------- dice
 const PIPS = { 1: [[2, 2]], 2: [[1, 1], [3, 3]], 3: [[1, 1], [2, 2], [3, 3]], 4: [[1, 1], [3, 1], [1, 3], [3, 3]], 5: [[1, 1], [3, 1], [2, 2], [1, 3], [3, 3]], 6: [[1, 1], [3, 1], [1, 2], [3, 2], [1, 3], [3, 3]] };
@@ -5135,6 +5150,7 @@ async function initLibrary() {
 	try { const p = await libLoad(); LIB = p ? normLibrary(p) : null; } catch { LIB = null; }
 	renderLibrary();
 }
+let exampleCarded = false;
 function renderLibrary() {
 	const on = !!LIB;
 	renderMissionSel();
@@ -5148,6 +5164,7 @@ function renderLibrary() {
 	$('#refNote').hidden = on;
 	$('#rulesBox').hidden = !on || !LIB.rules.docs.length;
 	$('#addCardWrap').hidden = !on;
+	if (on && state.example && !exampleCarded && state.minis.every(m => m.reserve)) { exampleCarded = true; applyState(exampleState()); save(); }
 	if (on) { renderFactionPick(); renderCardList(); renderRulesList(); fillAddCard(); autoMatchUnits(); }
 	renderTactics();
 	renderListPreview();
