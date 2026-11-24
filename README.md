@@ -67,6 +67,10 @@ Each player's Faction and Tactical cards sit in the board's right corners, Playe
 
 **Import army list** also reads the text export of [stimpacked.com](https://stimpacked.com): its units with their upgrades, its Tactical Cards (and the faction's own card), and its Draft Kit, whose missions and deployments show as buttons in the preview. Stimpacked gives a unit size instead of a model count: Small and Large are the model counts of the official Cost Table (Marines 6 or 9, Zealots 3, Adepts 4, Stalkers 1 or 2).
 
+### Roster PDFs from stimpacked.com
+
+**Load roster PDF (stimpacked.com)…** under Import army list reads a roster PDF exported from stimpacked.com, in the browser (nothing is uploaded). It puts the army in the chosen player's reserves with each unit's exact model count and the upgrades it bought, the faction and tactical cards in the tracker, and the draft kit's missions and deployments as buttons. Any unit, faction or tactical card your card library does not have yet is made from the roster and added to it: stats, slot, combat tags, weapons with surge and keywords, and abilities with their type, phase, cost and text, so a player needs no card library for their own army. Roster cards have no pictures; base sizes come from a table in the page.
+
 ## Units a card brings
 
 Some cards set an extra unit on the battlefield that the list does not buy. Importing a list (or an example army) puts those in the reserves too, at 0 supply: the Point Defense Drone (Raynor's Raiders), the Pylon (Khalai), the Omega Worm (Kerrigan's Swarm), the Sabotage Drone (Nova Covert Ops), the Holo Decoy (Nova), the Auto-Turret (Raven) and three Roachlings (Corpser). The import preview shows which card each comes from.

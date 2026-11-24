@@ -584,6 +584,8 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 					<select id="listExample"><option value="">Choose one…</option></select>
 				</div>
 				<textarea id="listText" rows="7" placeholder="Paste the army list here" aria-label="Army list"></textarea>
+				<div class="row"><label class="btn" for="rosterFile" title="A roster PDF exported from stimpacked.com: its units with their cards, the faction and tactical cards, and the draft kit. Read in this browser; nothing is uploaded.">Load roster PDF (stimpacked.com)…</label>
+					<input type="file" id="rosterFile" accept=".pdf,application/pdf" class="hidden-file"></div>
 				<label class="row" style="gap:6px;flex-wrap:nowrap"><input type="checkbox" id="listReplace" style="flex:none"> <span>Remove this player's models from the table first</span></label>
 				<div id="listPreview"></div>
 				<button class="btn primary" id="listAdd">Add army to table</button>
@@ -4447,6 +4449,236 @@ function sizedCount(name, size, card) {
 	const band = card?.modelsSupply?.length ? card.modelsSupply[Math.min(i, card.modelsSupply.length - 1)] : null, hi = band && /(\d+)\s*$/.exec(band.models);
 	return hi ? +hi[1] : 1;
 }
+// Reads a stimpacked.com roster PDF (its text, by position on the page) into units, cards and the draft kit.
+// pages: [[{ s, x, y, w, h }, ...], ...] (PDF points, y up). Returns null when it is not a roster.
+function parseRosterPages(pages) {
+	const RES = { 'PSIONIC ENERGY': 'PE', 'COMMAND POINTS': 'CP', 'COMMAND POINT': 'CP', 'BIOMASS': 'BM' };
+	const near = (a, b, d) => Math.abs(a - b) <= d;
+	const squash = s => String(s).replace(/\s+/g, '');            // "A C T I V E" -> "ACTIVE"
+	const TYPES = new Set(['ACTIVE', 'PASSIVE', 'REACTION']), PHASES = new Set(['MOVEMENT', 'ASSAULT', 'COMBAT', 'ANY', 'SCORING', 'DEPLOYMENT']);
+	const rowsOf = (items, tol = 2.5) => {   // items grouped into rows, top to bottom, each row left to right
+		const rows = [];
+		for (const it of [...items].sort((a, b) => b.y - a.y)) { const r = rows.find(r => near(r.y, it.y, tol)); if (r) r.items.push(it); else rows.push({ y: it.y, items: [it] }); }
+		for (const r of rows) r.items.sort((a, b) => a.x - b.x);
+		return rows;
+	};
+	const text = items => items.map(i => i.s).join(' ').replace(/\s+([,.;:)])/g, '$1').replace(/\(\s+/g, '(').replace(/\s+/g, ' ').trim();
+	const out = { name: '', race: '', faction: '', units: [], cards: [], missions: [], deployments: [] };
+	// the list's own header: "NAME | P R O T O S S | 2000 PTS"
+	const p0 = pages[0] || [];
+	const race = p0.find(i => /^(T E R R A N|Z E R G|P R O T O S S|TERRAN|ZERG|PROTOSS)$/.test(i.s.trim()));
+	if (race) { out.race = squash(race.s).charAt(0) + squash(race.s).slice(1).toLowerCase(); const nm = p0.filter(i => near(i.y, race.y, 3) && i.x < race.x).sort((a, b) => a.x - b.x); out.name = text(nm); }
+	// the page's own header and footer (date, title, link, page number) are not card text
+	pages = pages.map(items => items.filter(i => i.y > 26 && i.y < 812 && !/^https?:\/\//.test(i.s.trim())));
+	pages.forEach((items, pi) => {
+		// ---- unit cards: a row of stat labels
+		const labels = items.filter(i => i.s.trim() === 'Speed');
+		const heads = labels.map(sp => {
+			const row = items.filter(i => near(i.y, sp.y, 2.5));
+			const L = k => row.find(i => i.s.trim() === k);
+			if (!['Armour', 'Evade', 'HP', 'Shield', 'Size', 'Supply'].every(L)) return null;
+			return { y: sp.y, sp, L };
+		}).filter(Boolean).sort((a, b) => b.y - a.y);
+		heads.forEach((hd, hi) => {
+			const yTop = hd.y + 30, yBot = hi + 1 < heads.length ? heads[hi + 1].y + 30 : 0;
+			const region = items.filter(i => i.y < yTop && i.y > yBot);
+			const val = k => { const l = hd.L(k), cx = l.x + l.w / 2; const v = region.filter(i => i.h >= 9.8 && i.y > hd.y + 4 && i.y < hd.y + 16 && near(i.x + i.w / 2, cx, 14)); return v.length ? v[0].s.trim() : ''; };
+			const stats = { speed: val('Speed'), armour: val('Armour'), evade: val('Evade'), hp: val('HP'), shield: val('Shield'), size: val('Size'), supply: val('Supply') };
+			// the name: the largest text left of the stats, on or just above the stat values
+			const names = region.filter(i => i.x < hd.sp.x - 20 && i.y > hd.y + 4 && i.y < hd.y + 26 && i.h >= 10.5).sort((a, b) => b.h - a.h || b.y - a.y);
+			const name = names.length ? text(region.filter(i => near(i.y, names[0].y, 2) && i.x < hd.sp.x - 20 && i.h >= 10.5)) : '';
+			// "Core · 4 / 4 models · Biological, Light, Ground" (the tags can wrap onto the next line)
+			const slotRows = rowsOf(region.filter(i => i.x < hd.sp.x - 10 && i.y <= hd.y + 6 && i.y > hd.y - 14 && i.h < 9.5));
+			const slotTxt = slotRows.map(r => text(r.items)).join(' ');
+			const sm = /^(\w+)\s*·\s*(\d+)\s*\/\s*(\d+)\s*models?\s*·?\s*(.*)$/i.exec(slotTxt.replace(/\s*model\s*s\b/, ' models'));
+			const unit = { name, slot: sm ? sm[1] : '', count: sm ? +sm[2] : 1, max: sm ? +sm[3] : 1, tags: sm ? sm[4].split(',').map(t => t.trim()).filter(Boolean) : [], stats, weapons: [], abilities: [], page: pi + 1 };
+			// ---- weapons
+			const wh = region.find(i => i.s.trim() === 'WEAPON' && i.y < hd.y);
+			const abilTypes = region.filter(i => TYPES.has(i.s.trim()) && (!wh || i.y < wh.y));
+			const firstAbil = abilTypes.length ? Math.max(...abilTypes.map(t => t.y)) + 24 : -1;
+			if (wh) {
+				const hrow = region.filter(i => near(i.y, wh.y, 2));
+				const col = k => hrow.find(i => i.s.trim() === k)?.x;
+				const cx = { rng: col('RNG'), tgt: col('TGT'), roa: col('ROA'), hit: col('HIT'), dmg: col('DMG') };
+				const rows = rowsOf(region.filter(i => i.y < wh.y - 2 && i.y > firstAbil));
+				let w = null;
+				for (const r of rows) {
+					const first = r.items[0], t0 = first.s.trim();
+					if (t0 === 'Surge:' && w) { const m = /^(.+?)\s*\((.+)\)\s*$/.exec(text(r.items.slice(1))); w.surgeType = m ? m[1] : text(r.items.slice(1)); w.surgeDice = m ? m[2] : ''; continue; }
+					if (t0 === 'Keywords:' && w) { w.keywords = text(r.items.slice(1)); continue; }
+					if (/^FOR$/i.test(t0) && w) { w.replaces = text(r.items.slice(1)); continue; }
+					const at = k => r.items.find(i => cx[k] != null && near(i.x, cx[k], 6));
+					if (near(first.x, wh.x, 4) && at('rng') && at('hit')) {
+						const nameItems = r.items.filter(i => i.x < cx.rng - 2 && i.s.trim() !== 'UPGRADE');
+						w = { name: text(nameItems), range: at('rng').s.trim(), target: at('tgt')?.s.trim() || '', roa: at('roa')?.s.trim() || '', hit: at('hit').s.trim(), damage: at('dmg')?.s.trim() || '',
+							surgeType: '', surgeDice: '', keywords: '', upgrade: r.items.some(i => i.s.trim() === 'UPGRADE'), replaces: '' };
+						const fr = /\bFOR\s+(.+)$/i.exec(w.name); if (fr) { w.replaces = fr[1]; w.name = w.name.replace(/\s*\bFOR\s+.+$/i, ''); }
+						unit.weapons.push(w);
+					} else if (w && w.keywords && r.items[0].x > wh.x + 20) w.keywords += ' ' + text(r.items);   // keywords wrapping
+				}
+			}
+			// ---- abilities, in two columns: a type word (ACTIVE / PASSIVE / REACTION), its name above or beside it
+			const midX = 300;
+			const heads2 = abilTypes.map(t => {
+				const left = t.x < midX;
+				const inCol = i => (i.x < midX) === left;
+				const nm = region.filter(i => inCol(i) && i.h > 9.4 && i.h < 10.2 && i.s.trim() !== 'Mark used' && i.y >= t.y - 2 && i.y < t.y + 24 && i.x < t.x + 5 + (near(i.y, t.y, 2) ? 0 : 400) && !TYPES.has(i.s.trim()))
+					.filter(i => near(i.y, t.y, 2) ? i.x < t.x : true).sort((a, b) => a.y - b.y);
+				const nameRowY = nm.length ? nm[0].y : t.y;
+				const nameTxt = text(region.filter(i => inCol(i) && near(i.y, nameRowY, 2) && i.h > 9.4 && i.h < 10.2 && i.s.trim() !== 'Mark used' && (near(nameRowY, t.y, 2) ? i.x < t.x : true)));
+				const tags = region.filter(i => inCol(i) && i.y <= t.y + 2 && i.y > t.y - 26 && (PHASES.has(i.s.trim()) || i.s.trim() === 'UPGRADE'));
+				const costRow = region.filter(i => inCol(i) && near(i.y, t.y, 2) && i.x > t.x);
+				const cm = /·\s*(\d+)\s+(.+)$/.exec(text(costRow).replace(/\s*Mark used\s*/, ''));
+				const res = cm ? (RES[cm[2].replace(/\s+/g, ' ').trim().toUpperCase()] || cm[2]) : '';
+				return { left, t, nameY: Math.max(nameRowY, t.y), bodyTop: Math.min(t.y, ...tags.map(g => g.y)) - 1, name: nameTxt, type: t.s.trim().charAt(0) + t.s.trim().slice(1).toLowerCase(),
+					phase: (tags.find(g => PHASES.has(g.s.trim()))?.s.trim() || '').replace(/^(.)(.*)$/, (m, a, b) => a + b.toLowerCase()), upgrade: tags.some(g => g.s.trim() === 'UPGRADE'), cost: cm ? `${cm[1]} ${res}` : null };
+			});
+			for (const side of [true, false]) {
+				const hs = heads2.filter(h => h.left === side).sort((a, b) => b.nameY - a.nameY);
+				hs.forEach((h, k) => {
+					const below = k + 1 < hs.length ? hs[k + 1].nameY + 1 : yBot;
+					const body = region.filter(i => ((i.x < midX) === side) && i.y < h.bodyTop && i.y > below && i.h < 9.4 && !TYPES.has(i.s.trim()) && !PHASES.has(i.s.trim()) && i.s.trim() !== 'UPGRADE');
+					unit.abilities.push({ name: h.name, type: h.type, cost: h.cost, phase: h.phase, text: rowsOf(body).map(r => text(r.items)).join(' ').replace(/\s+/g, ' ').trim(), upgrade: h.upgrade });
+				});
+			}
+			if (unit.name) out.units.push(unit);
+		});
+		// ---- faction and tactical cards: "+1 PSIONIC ENERGY" under the card's name
+		const resItems = items.filter(i => /^\+\d+$/.test(i.s.trim()));
+		const cards = resItems.map(ri => {
+			const rw = items.filter(i => near(i.y, ri.y, 2.5) && i.x > ri.x && i.x < ri.x + 160);
+			const resTxt = text(rw.filter(i => !/^\d+$/.test(i.s.trim()) && i.s.trim() !== 'gas'));
+			const gas = rw.find((i, k) => /^\d+$/.test(i.s.trim()) && rw[k + 1]?.s.trim() === 'gas');
+			const nm = items.filter(i => i.y > ri.y + 8 && i.y < ri.y + 34 && i.x >= ri.x - 25 && i.x < ri.x + 40 && i.h >= 10.3).sort((a, b) => a.y - b.y)[0];
+			if (!nm) return null;
+			const head = items.filter(i => near(i.y, nm.y, 2.5) && i.x >= nm.x - 2 && i.x < nm.x + 170);
+			const isFaction = head.some(i => /FACTIONCARD/.test(squash(i.s)));
+			return { x0: nm.x - 4, y: nm.y, resY: ri.y, name: text(head.filter(i => !/FACTIONCARD/.test(squash(i.s)))), kind: isFaction ? 'faction' : 'tactical',
+				value: +ri.s.trim().slice(1), res: RES[resTxt.toUpperCase()] || '', gas: gas ? +gas.s.trim() : null, abilities: [] };
+		}).filter(Boolean);
+		for (const c of cards) {
+			// the card's column: from its left edge to the next card's to the right; down to the next card below
+			const right = Math.min(...cards.filter(o => o.x0 > c.x0 + 40).map(o => o.x0), 600);
+			const below = Math.max(...cards.filter(o => near(o.x0, c.x0, 30) && o.y < c.y - 5).map(o => o.y + 14), 20);
+			const reg = items.filter(i => i.x >= c.x0 && i.x < right - 2 && i.y < c.resY - 3 && i.y > below);
+			const typeIt = reg.filter(i => TYPES.has(squash(i.s)));
+			const hs = typeIt.map(t => {
+				let nmItems = reg.filter(i => near(i.y, t.y, 3) && i.x < t.x && !PHASES.has(squash(i.s)));
+				if (!nmItems.length) {   // the name on the line above its type
+					const up = reg.filter(i => i.y > t.y + 3 && i.y < t.y + 28 && i.h >= 9.9 && !TYPES.has(squash(i.s)) && !PHASES.has(squash(i.s))).sort((a, b) => a.y - b.y)[0];
+					if (up) nmItems = reg.filter(i => near(i.y, up.y, 2.5));
+				}
+				const ph = reg.find(i => PHASES.has(squash(i.s)) && i.y <= t.y + 3 && i.y > t.y - 26);
+				return { y: Math.max(t.y, ...nmItems.map(i => i.y)), bodyTop: Math.min(t.y, ph ? ph.y : t.y) - 1, name: text(nmItems), type: squash(t.s).charAt(0) + squash(t.s).slice(1).toLowerCase(), phase: ph ? squash(ph.s).charAt(0) + squash(ph.s).slice(1).toLowerCase() : '' };
+			}).sort((a, b) => b.y - a.y);
+			hs.forEach((h, k) => {
+				const lim = k + 1 < hs.length ? hs[k + 1].y + 2 : below;
+				const body = reg.filter(i => i.y < h.bodyTop && i.y > lim && !TYPES.has(squash(i.s)) && !PHASES.has(squash(i.s)));
+				c.abilities.push({ name: h.name, type: h.type, cost: null, phase: h.phase, text: rowsOf(body).map(r => text(r.items)).join(' ').replace(/\s+/g, ' ').trim(), upgrade: false });
+			});
+			delete c.x0; delete c.y; delete c.resY;
+			out.cards.push(c);
+		}
+		// ---- the draft kit: mission and deployment names under "D R A F T K I T"
+		const dk = items.find(i => squash(i.s) === 'DRAFTKIT');
+		if (dk) for (const i of items) if (i.y < dk.y && i.h >= 10.5 && i.h < 12) {
+			const n = i.s.trim();
+			if (typeof DEPLOYMENTS !== 'undefined' && Object.values(DEPLOYMENTS).some(d => d.name.toLowerCase() === n.toLowerCase())) out.deployments.push(n);
+			else if (/^[A-Z][\w' ]+$/.test(n)) out.missions.push(n);
+		}
+	});
+	const fc = out.cards.find(c => c.kind === 'faction');
+	out.faction = fc ? fc.name : out.race;
+	return out.units.length || out.cards.length ? out : null;
+}
+
+// base sizes by unit name, for units a roster brings without a card library
+const ROSTER_BASES = {"adept": 40, "artanis": 40, "praetor guard": 40, "pylon": 80, "sentry": 50, "stalker": 80, "zealot": 40, "immortal": 100, "zeratul": 40, "nerazim watchers": 40, "tassadar": 40, "twilight templar": 40, "high templar": 40, "marine": 32, "marauder": 50, "medic": 32, "jim raynor": 40, "point defense drone": 32, "raynor s raider": 32, "goliath": 80, "siege tank": 150, "nova": 40, "holo decoy": 32, "sabotage drone": 40, "spec ops marauder": 50, "auto turret": 40, "hydralisk": 40, "kerrigan": 40, "omega worm": 80, "kerrigan swarm raptor": 32, "queen": 80, "roach": 50, "corpser": 50, "roachling": 32, "vile": 50, "zergling": 32, "raptor": 32, "swarmling": 32, "ravager": 80, "zagara": 100, "defiler": 80, "vileling": 32, "bile launcher": 100};
+const slug = t => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+// pdf.js, loaded the first time a PDF is read
+let pdfjsReady = null;
+function loadPdfJs() {
+	if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+	return pdfjsReady ||= new Promise((res, rej) => {
+		const sc = document.createElement('script');
+		sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+		sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; res(window.pdfjsLib); };
+		sc.onerror = () => { pdfjsReady = null; rej(new Error('The PDF reader could not be loaded. Check the internet connection.')); };
+		document.head.appendChild(sc);
+	});
+}
+async function readPdfPages(file) {
+	const lib = await loadPdfJs(), doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise, pages = [];
+	for (let n = 1; n <= Math.min(doc.numPages, 40); n++) {
+		const tc = await (await doc.getPage(n)).getTextContent();
+		pages.push(tc.items.filter(t => t.str && t.str.trim()).map(t => ({ s: t.str, x: t.transform[4], y: t.transform[5], w: t.width, h: t.height })));
+	}
+	return pages;
+}
+// a roster's units and cards as library cards: one card per unit type, its weapons and abilities from every copy
+function rosterCards(r) {
+	const out = [], race = r.race || 'Protoss', byName = new Map();
+	for (const u of r.units) { if (!byName.has(u.name)) byName.set(u.name, []); byName.get(u.name).push(u); }
+	for (const [name, us] of byName) {
+		const u0 = us[0], weapons = [], abilities = [];
+		for (const u of us) {
+			for (const w of u.weapons) if (!weapons.some(x => x.name === w.name)) weapons.push({ phase: /^E$/i.test(w.range) ? 'Combat' : 'Assault', name: w.name, range: w.range, target: w.target, roa: w.roa, hit: w.hit,
+				surgeType: w.surgeType, surgeDice: w.surgeDice, damage: w.damage, keywords: w.keywords || null, upgrade: w.upgrade, replaces: w.replaces || null });
+			for (const a of u.abilities) if (!abilities.some(x => x.name === a.name)) abilities.push({ ...a });
+		}
+		const st = u0.stats, num = v => /^\d+$/.test(v) ? +v : 0, sup = num(st.supply);
+		out.push({ id: 'sp-' + slug(race + '-' + name), faction: race, name, cardType: /hero/i.test(u0.slot) ? 'hero' : 'unit', source: 'stimpacked.com roster', page: u0.page,
+			baseMm: ROSTER_BASES[cardKey(name)] || ROSTER_BASES[cardKey(name).replace(/s$/, '')] || exampleBase(name) || 32,
+			combatTags: u0.tags.filter(t => !/^unique$/i.test(t)), combatRole: '', armySlot: u0.slot,
+			stats: { speed: st.speed, armour: st.armour, evade: st.evade, hitPoints: num(st.hp), shield: num(st.shield), size: st.size },
+			modelsSupply: [...new Set(us.map(u => u.count))].sort((a, b) => a - b).map(n => ({ models: `${n}-${n}`, supply: sup })), weapons, abilities });
+	}
+	for (const c of r.cards) {
+		if (out.some(x => x.name === c.name && (x.cardType === 'tactical' || x.cardType === 'faction'))) continue;
+		out.push({ id: 'sp-' + slug(race + '-' + c.kind + '-' + c.name), faction: race, name: c.name, cardType: c.kind, source: 'stimpacked.com roster', combatTags: [],
+			stats: {}, modelsSupply: [], weapons: [], abilities: c.abilities, resource: c.res ? { type: c.res, value: c.value } : null });
+	}
+	return out;
+}
+async function importRosterPdf(file) {
+	const pages = await readPdfPages(file), r = parseRosterPages(pages);
+	if (!r || !r.units.length) { toast('That PDF is not a stimpacked.com roster: no unit cards were found in it.'); return; }
+	// cards the library does not have yet go into it (kept in this browser)
+	const mine = rosterCards(r).map(normCard).filter(Boolean);
+	const have = c => (c.cardType === 'tactical' || c.cardType === 'faction') ? findTacticalCard(c.name, r.faction) : findCardFor(c.name, r.race);
+	const add = mine.filter(c => !have(c));
+	if (add.length) {
+		const base = LIB || { kind: 'skirmish-library', title: 'Roster cards', cards: [], rules: { docs: [], toc: [], summary: '' } };
+		const lib = { ...base, cards: base.cards.filter(c => !add.some(a => a.id === c.id)).concat(add) };
+		try { await libSave(lib); } catch { }
+		LIB = lib; renderLibrary();
+	}
+	// the army: each unit with its exact model count and the upgrades it bought
+	const player = listPlayer;
+	if ($('#listReplace').checked) {
+		for (const m of state.minis.filter(m => m.player === player)) { dropMove(m.id); removeObj(m.id); }
+		state.minis = state.minis.filter(m => m.player !== player);
+		select(null); sendMoves();
+	}
+	const plan = r.units.map(u => {
+		const card = findCardFor(u.name, r.race), upgrades = [...u.weapons.filter(w => w.upgrade).map(w => w.name), ...u.abilities.filter(a => a.upgrade).map(a => a.name)].slice(0, 12);
+		const sup = /^\d+$/.test(u.stats.supply) ? +u.stats.supply : (supplyFor(card, u.count) ?? 0);
+		return { name: u.name, section: u.slot, cost: '', upgrades, models: [{ count: u.count, name: u.name, card }], card, total: u.count, supply: sup };
+	});
+	const made = armyPieces(plan, player), ids = [];
+	state.units.push(...made.units.map(normUnit));
+	for (const m of made.minis) { state.minis.push(m); addMiniObj(m); ids.push(m.id); }
+	if (r.cards.length) { state.tactics = state.tactics.filter(t => t.player !== player).concat(r.cards.map(c => tacticFrom(c.name, player, r.race))); renderTactics(); }
+	state.example = false;
+	undoStack.push({ t: 'add', ids });
+	renderLists(); save();
+	const deps = r.deployments.map(depKey).filter(Boolean);
+	$('#listText').value = '';
+	$('#listPreview').innerHTML = `<p class="note"><b>${esc(r.name || 'Roster')}</b> (${esc(r.faction || r.race)}): ${plural(plan.length, 'unit')}, ${plural(ids.length, 'model')} to ${esc(state.players[player].name)}’s reserves, ${plural(r.cards.length, 'card')} to the tracker${add.length ? `, ${plural(add.length, 'new card')} into the card library` : ''}.</p>`
+		+ (deps.length ? `<p class="note">Deployments in this list: ${deps.map(k => `<button type="button" class="btn" data-dep="${k}">${esc(DEPLOYMENTS[k].name)}</button>`).join(' ')}</p>` : '')
+		+ (r.missions.length ? `<p class="note">Missions in this list: ${r.missions.map(n => `<button type="button" class="btn" data-mis="${esc(n)}">${esc(n)}</button>`).join(' ')}</p>` : '');
+	toast(`${esc(state.players[player].name)}: ${esc(r.name || 'roster')} loaded, ${plural(plan.length, 'unit')} in the reserves${add.length ? ` and ${plural(add.length, 'card')} added to the card library` : ''}`);
+}
 function parseStimpacked(text) {
 	const lines = String(text || '').split(/\r?\n/), units = [], cards = [], deployments = [], missions = [], pregame = [];
 	const head = lines.map(l => l.trim()).filter(Boolean);
@@ -4620,6 +4852,12 @@ $('#listPreview').addEventListener('click', e => {
 	}
 });
 $('#listText').addEventListener('input', () => renderListPreview());
+$('#rosterFile').addEventListener('change', async e => {
+	const f = e.target.files[0]; e.target.value = '';
+	if (!f) return;
+	toast('Reading the roster…');
+	try { await importRosterPdf(f); } catch (err) { toast(esc(err?.message || 'That PDF could not be read.')); }
+});
 $('#listAdd').addEventListener('click', () => {
 	const list = parseArmyList($('#listText').value), plan = planArmy(list), player = listPlayer;
 	renderListPreview();
