@@ -948,7 +948,7 @@ function exampleState() {
 	return {
 		v: 2, example: true, nextId: 100, unit: 'in', ranges: '3, 6, 12', showRanges: false,
 		table: { w: 36, d: 36, grid: false, mat: 'plain', lockTerrain: false, deploy: 'abandoned-camp', mission: 'Frontlines · Skirmish Level' },
-		score: normScore(null),
+		score: { ...normScore(null), avail: MISSION_SUPPLY['Frontlines · Skirmish Level']?.[0] || 0 },
 		players: [{ name: 'Player 1', color: '#4c9dff' }, { name: 'Player 2', color: '#ff6250' }],
 		units, minis, tactics,
 		terrain: [
@@ -3872,10 +3872,10 @@ function renderSupply() {
 		const us = supplyUnits(i), total = Math.min(99, us.reduce((s, u) => s + unitSupply(u), 0));
 		const el = $('#supply' + i), avail = state.score?.avail || 0;
 		el.style.setProperty('--pc', state.players[i].color);
-		el.classList.toggle('over', avail > 0 && total > avail);   // more on the table than is available
+		el.classList.toggle('over', avail > 0 && avail < 99 && total > avail);   // more on the table than is available
 		el.querySelector('.digits').textContent = String(total).padStart(2, '0');
 		const parts = us.filter(u => unitSupply(u) > 0).map(u => `${u.name} ${unitSupply(u)}` + (unitSupply(u) < u.supply ? ` (of ${u.supply})` : ''));
-		el.title = `${state.players[i].name}: ${total} supply on the table` + (avail ? ` of ${avail} available` : '') + (parts.length ? '\n' + parts.join('\n') : '');
+		el.title = `${state.players[i].name}: ${total} supply on the table` + (avail >= 99 ? ' (Supply Pool unlimited in the final round)' : avail ? ` of ${avail} in the Supply Pool` : '') + (parts.length ? '\n' + parts.join('\n') : '');
 		el.setAttribute('aria-label', `${state.players[i].name}: ${total} supply on the table`);
 	}
 }
@@ -4363,6 +4363,35 @@ function libMissions() {
 }
 // a mission's text in parts: start and per-round supply, game length, then its labelled sections
 const MISSION_HEADS = /(MISSION PARAMETERS|SCORING CONDITIONS|ADDITIONAL CONDITIONS|SPECIAL WINNING CONDITIONS|FROM THE START OF THE (?:FIRST|SECOND) ROUND|FROM THE (?:FIRST|SECOND) ROUND|END OF ROUND \d|START OF THE ROUND\s*(?:\([^)]*\)|\d+)|ASSAULT PHASE|SCORING PHASE|GATHER ACTION|CLAIM|Sabotage Action):/g;
+// each mission's starting Supply Pool, Supply Escalation per round and game length, so it works without a card library
+const MISSION_SUPPLY = {
+	'Supply Drop · Standard Engagement': [6, 2, 5],
+	'Supply Drop · Skirmish Level': [4, 1, 4],
+	'Hold Position · Standard Engagement': [6, 2, 5],
+	'Hold Position · Skirmish Level': [3, 1, 5],
+	'Frontlines · Standard Engagement': [6, 2, 5],
+	'Frontlines · Skirmish Level': [3, 1, 5],
+	'Gather the Resources · Standard Engagement': [6, 2, 5],
+	'Gather the Resources · Skirmish Level': [3, 1, 5],
+	'Divide and Conquer · Standard Engagement': [8, 2, 4],
+	'Divide and Conquer · Skirmish Level': [4, 1, 4],
+	'Artefact Hunt · Standard Engagement': [6, 2, 5],
+	'Artefact Hunt · Skirmish Level': [3, 1, 5],
+	'Fire in the Sky · Standard Engagement': [5, 3, 5],
+	'Fire in the Sky · Skirmish Level': [3, 2, 5]
+};
+function missionPool(round) {
+	const k = state.table.mission, v = MISSION_SUPPLY[k];
+	const mi = v ? { start: v[0], perRound: v[1], length: v[2] } : missionInfo(k);
+	if (!mi || mi.start == null) return null;
+	if (mi.length && round >= mi.length) return 99;   // the final round: unlimited
+	return mi.start + (mi.perRound || 0) * (round - 1);
+}
+function applyMissionSupply() {
+	const v = missionPool(state.score.round);
+	if (v == null || v === state.score.avail) return;
+	state.score.avail = v; renderScore(); renderSupply(); save();
+}
 function missionInfo(key) {
 	const ms = libMissions().get(key); if (!ms) return null;
 	const top = /^\s*(\d+)\s*\+(\d+)\s*SUPPLY PER ROUND\.\s*GAME LENGTH:\s*(\d+)\.?\s*/i.exec(ms.text);
@@ -4395,7 +4424,9 @@ function missionHtml() {
 		${mi.lead ? `<p class="note" style="margin:4px 0 0">Ends at once on a ${mi.lead}+ lead${gap ? ` · the gap is ${gap} now` : ''}${mi.length ? ` · round ${sc.round} of ${mi.length}` : ''}.</p>` : ''}</div>`;
 }
 function renderMissionSel() {
-	const all = [...libMissions().values()], cur = state.table.mission, skirmish = state.table.w <= 40;
+	const lib = libMissions(), all = [...lib.values()], cur = state.table.mission, skirmish = state.table.w <= 40;
+	// the missions the page knows by name, for choosing one without a card library (their text needs the library)
+	for (const k of Object.keys(MISSION_SUPPLY)) if (!lib.has(k)) { const [name, level] = k.split(' · '); all.push({ key: k, name, level, text: '' }); }
 	const levels = skirmish ? ['Skirmish Level', 'Standard Engagement'] : ['Standard Engagement', 'Skirmish Level'];
 	let opts = '<option value="">No mission</option>' + levels.map(l => {
 		const ms = all.filter(m => m.level.toLowerCase() === l.toLowerCase()).sort((a, b) => a.name.localeCompare(b.name));
@@ -4405,12 +4436,12 @@ function renderMissionSel() {
 	$('#missionSel').innerHTML = opts;
 	$('#missionSel').value = cur || '';
 	$('#missionSel').disabled = !all.length && !cur;
-	$('#missionNote').textContent = !all.length ? 'The missions come from the Mission Cards in your card library: load it under Card library below.'
+	$('#missionNote').textContent = !lib.size ? 'Load your card library (Card library below) to read the missions’ scoring. The Supply Pool follows the mission either way.'
 		: cur ? 'Point at either player\'s score at the top to see how this mission scores.' : '';
 }
 $('#missionSel').addEventListener('change', e => {
 	state.table.mission = normMission(e.target.value);
-	renderMissionSel(); buildTable(); save();
+	renderMissionSel(); buildTable(); save(); applyMissionSupply();
 	if (state.table.mission) toast(`Mission: ${esc(state.table.mission)}. Point at a score at the top to see how it scores.`);
 });
 function isDivide() { return /^divide and conquer/i.test(state?.table?.mission || ''); }
@@ -5011,7 +5042,7 @@ function renderScore() {
 	$('#roundNum').textContent = sc.round;
 	$('#roundMinus').disabled = sc.round <= 1;
 	$('#roundPlus').disabled = sc.round >= 9;
-	$('#availNum').textContent = String(sc.avail).padStart(2, '0');
+	$('#availNum').textContent = sc.avail >= 99 ? '∞' : String(sc.avail).padStart(2, '0');
 	$('#availMinus').disabled = sc.avail <= 0;
 	renderSupply();
 	if (!scorePop.hidden) renderScorePop();
@@ -5079,7 +5110,7 @@ function clearRoundTokens() {
 	if (n) { renderLists(); renderCard(); save(); }
 	return n;
 }
-function setCounter(key, v, lo, hi) { state.score[key] = Math.max(lo, Math.min(hi, v)); renderScore(); save(); }
+function setCounter(key, v, lo, hi) { state.score[key] = Math.max(lo, Math.min(hi, v)); renderScore(); save(); if (key === 'round') applyMissionSupply(); }
 $('#endRound').addEventListener('click', () => {
 	const taken = decideObjectives(), r = state.score.round;
 	save();
