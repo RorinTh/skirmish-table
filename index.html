@@ -1580,7 +1580,7 @@ function renderMatPick() {
 }
 $('#matPick').addEventListener('click', e => {
 	const b = e.target.closest('button[data-mat]'); if (!b) return;
-	state.table.mat = b.dataset.mat; buildTable(); renderMatPick(); save();
+	state.table.mat = b.dataset.mat; buildTable(); restyleTerrain(); renderMatPick(); save();
 });
 const tableGroup = new THREE.Group();
 scene.add(tableGroup);
@@ -2095,10 +2095,18 @@ function addMiniObj(m) {
 // table inches (one tile = 4"), so a big piece shows more of it instead of a stretched copy
 const TER_TILE = 4;
 const terrainTextures = new Map();
-function terrainTexture(cls) {
-	if (terrainTextures.has(cls)) return terrainTextures.get(cls);
+const terrainTheme = () => ['snow', 'station', 'temple'].includes(state?.table?.mat) ? state.table.mat : 'base';
+// per theme: the colour of each Size (light to dark, as the base colours)
+const THEME_TINT = {
+	snow: { '0': 0xdde3ea, '1': 0xc9d6e3, '2': 0xa3b6cb, '3': 0x7d92ab, grass: 0x9db4a2 },
+	station: { '0': 0x8e949c, '1': 0x8796a8, '2': 0x5f6e82, '3': 0x3e4a5c, grass: 0x3f9a8f },
+	temple: { '0': 0xcdb38c, '1': 0xc0a37a, '2': 0x9e8059, '3': 0x6f573b, grass: 0x5e8a3a }
+};
+function terrainTexture(cls, theme = terrainTheme()) {
+	const key = theme + '|' + cls;
+	if (terrainTextures.has(key)) return terrainTextures.get(key);
 	const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S;
-	const x = cv.getContext('2d'), R = seeded(9173 + String(cls).charCodeAt(0) * 131);
+	const x = cv.getContext('2d'), R = seeded(9173 + String(cls).charCodeAt(0) * 131 + theme.length * 7919);
 	const px = S / TER_TILE;   // pixels per inch
 	const speckle = (n, lo, hi, rmax) => { for (let i = 0; i < n; i++) { const v = lo + R() * (hi - lo) | 0; x.fillStyle = `rgb(${v},${v},${v})`; x.beginPath(); x.arc(R() * S, R() * S, 0.6 + R() * rmax, 0, 7); x.fill(); } };
 	// a crack: a jagged line wandering from a random point
@@ -2108,7 +2116,9 @@ function terrainTexture(cls) {
 		for (let i = 0; i < len; i++) { a += (R() - 0.5) * 1.1; cx += Math.cos(a) * 9; cy += Math.sin(a) * 9; x.lineTo(cx, cy); }
 		x.stroke();
 	};
-	if (cls === '0') {          // scatter: rubble and gravel
+	const done = theme !== 'base' && themedTexture(x, S, px, R, cls, theme, speckle, crack);
+	if (done) { }
+	else if (cls === '0') {          // scatter: rubble and gravel
 		x.fillStyle = 'rgb(214,214,214)'; x.fillRect(0, 0, S, S);
 		speckle(2600, 150, 255, 1.6);
 		for (let i = 0; i < 70; i++) {   // stones, lit from the top left
@@ -2157,8 +2167,88 @@ function terrainTexture(cls) {
 	}
 	const tex = new THREE.CanvasTexture(cv);
 	tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = maxAniso; tex.userData.shared = true;
-	terrainTextures.set(cls, tex);
+	terrainTextures.set(key, tex);
 	return tex;
+}
+// the themed surfaces, drawn in greys (the Size colour tints them)
+function themedTexture(x, S, px, R, cls, theme, speckle, crack) {
+	const fill = v => { x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(0, 0, S, S); };
+	const g = v => `rgb(${v},${v},${v})`;
+	const drifts = (n, rmin, rmax, a) => { for (let i = 0; i < n; i++) { const r = rmin + R() * (rmax - rmin), cx = R() * S, cy = R() * S; const gr = x.createRadialGradient(cx, cy, 0, cx, cy, r); gr.addColorStop(0, `rgba(255,255,255,${a})`); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); } };
+	if (theme === 'snow') {
+		if (cls === 'grass') {            // frosted, dry grass
+			fill(215); x.lineCap = 'round';
+			for (let i = 0; i < 2200; i++) { const v = 170 + R() * 85 | 0, cx = R() * S, cy = R() * S, a = -Math.PI / 2 + (R() - 0.5) * 1.6, l = 4 + R() * 9; x.strokeStyle = g(v); x.lineWidth = 1 + R(); x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a) * l, cy + Math.sin(a) * l); x.stroke(); }
+			drifts(30, 20, 60, 0.6);
+		} else if (cls === '0') {         // snowy gravel
+			fill(232); speckle(1800, 150, 230, 1.6);
+			for (let i = 0; i < 50; i++) { const r = 4 + R() * 12, cx = R() * S, cy = R() * S, v = 150 + R() * 60 | 0; x.fillStyle = g(v); x.beginPath(); x.ellipse(cx, cy, r, r * 0.8, R() * 3, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,0.9)'; x.beginPath(); x.ellipse(cx - r * 0.2, cy - r * 0.3, r * 0.8, r * 0.45, R() * 3, 0, 7); x.fill(); }
+			drifts(25, 30, 80, 0.7);
+		} else {                          // stone or plating under ice: blocks with snow on the edges and frost
+			fill(cls === '3' ? 190 : 210);
+			const step = cls === '1' ? 2 : 1;
+			for (let a = 0; a < TER_TILE; a += step) for (let b = 0; b < TER_TILE; b += step) { const v = 175 + R() * 50 | 0; x.fillStyle = g(v); x.fillRect(a * px + 2, b * px + 2, step * px - 4, step * px - 4); }
+			for (let i = 0; i < 14; i++) crack(6 + R() * 16, 1.6, 120);
+			drifts(70, 15, 55, 0.85);
+			speckle(2500, 225, 255, 1.1);     // frost glitter
+			for (let i = 0; i < 26; i++) { x.strokeStyle = 'rgba(255,255,255,0.7)'; x.lineWidth = 1; const cx = R() * S, cy = R() * S; for (let k = 0; k < 3; k++) { const a = k * Math.PI / 3; x.beginPath(); x.moveTo(cx - Math.cos(a) * 5, cy - Math.sin(a) * 5); x.lineTo(cx + Math.cos(a) * 5, cy + Math.sin(a) * 5); x.stroke(); } }
+		}
+		return true;
+	}
+	if (theme === 'station') {
+		if (cls === 'grass') {            // cable runs and pipework a model can push through
+			fill(120); x.lineCap = 'round';
+			for (let i = 0; i < 70; i++) { const v = 150 + R() * 100 | 0; x.strokeStyle = g(v); x.lineWidth = 2 + R() * 5; let cx = R() * S, cy = R() * S, a = R() * 6.3; x.beginPath(); x.moveTo(cx, cy); for (let k = 0; k < 8; k++) { a += (R() - 0.5) * 0.9; cx += Math.cos(a) * 18; cy += Math.sin(a) * 18; x.lineTo(cx, cy); } x.stroke(); }
+			speckle(160, 240, 255, 2.2);      // indicator lights
+		} else if (cls === '0') {         // scrap and loose bolts on deck plates
+			fill(150);
+			for (let k = 0; k <= TER_TILE; k++) { x.strokeStyle = g(105); x.lineWidth = 2; x.beginPath(); x.moveTo(k * px, 0); x.lineTo(k * px, S); x.moveTo(0, k * px); x.lineTo(S, k * px); x.stroke(); }
+			for (let i = 0; i < 60; i++) { const w = 6 + R() * 22, h = 3 + R() * 8, v = 170 + R() * 80 | 0; x.save(); x.translate(R() * S, R() * S); x.rotate(R() * 3); x.fillStyle = g(v); x.fillRect(-w / 2, -h / 2, w, h); x.restore(); }
+		} else {                          // hull plating: panels, rivets, vents and hazard stripes
+			fill(cls === '3' ? 160 : 180);
+			const cell = cls === '1' ? 2 : 1;
+			for (let a = 0; a < TER_TILE; a += cell) for (let b = 0; b < TER_TILE; b += cell) {
+				const v = 170 + R() * 60 | 0, X0 = a * px, Y0 = b * px, W0 = cell * px;
+				x.fillStyle = g(v); x.fillRect(X0 + 2, Y0 + 2, W0 - 4, W0 - 4);
+				x.strokeStyle = g(90); x.lineWidth = 2.5; x.strokeRect(X0 + 2, Y0 + 2, W0 - 4, W0 - 4);
+				x.fillStyle = g(240); for (const [rx, ry] of [[6, 6], [W0 - 6, 6], [6, W0 - 6], [W0 - 6, W0 - 6]]) { x.beginPath(); x.arc(X0 + rx, Y0 + ry, 2.4, 0, 7); x.fill(); }
+				const r = R();
+				if (r < 0.3) { x.fillStyle = g(70); for (let k = 0; k < 6; k++) x.fillRect(X0 + W0 * 0.2, Y0 + W0 * (0.25 + k * 0.09), W0 * 0.6, W0 * 0.04); }   // a vent grille
+				else if (r < 0.45) { x.save(); x.beginPath(); x.rect(X0 + 4, Y0 + W0 * 0.4, W0 - 8, W0 * 0.2); x.clip(); for (let k = -4; k < 12; k++) { x.fillStyle = k % 2 ? g(250) : g(60); x.beginPath(); x.moveTo(X0 + k * 14, Y0 + W0 * 0.6); x.lineTo(X0 + k * 14 + 14, Y0 + W0 * 0.4); x.lineTo(X0 + k * 14 + 28, Y0 + W0 * 0.4); x.lineTo(X0 + k * 14 + 14, Y0 + W0 * 0.6); x.fill(); } x.restore(); }   // hazard stripes
+				else if (r < 0.6) { x.fillStyle = g(255); x.fillRect(X0 + W0 * 0.15, Y0 + W0 * 0.47, W0 * 0.7, W0 * 0.06); }   // a light strip
+			}
+			for (let i = 0; i < 30; i++) { x.strokeStyle = 'rgba(40,40,40,0.35)'; x.lineWidth = 1; const cx = R() * S, cy = R() * S, a = R() * 3; x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a) * 20, cy + Math.sin(a) * 20); x.stroke(); }
+		}
+		return true;
+	}
+	if (theme === 'temple') {
+		if (cls === 'grass') {            // jungle vines and ferns
+			fill(150); x.lineCap = 'round';
+			for (let i = 0; i < 260; i++) { const v = 170 + R() * 85 | 0, cx = R() * S, cy = R() * S, a = R() * 6.3, l = 10 + R() * 18; x.strokeStyle = g(v); x.lineWidth = 2; x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a) * l, cy + Math.sin(a) * l); x.stroke();
+				for (let k = 1; k < 5; k++) { const t = k / 5, bx = cx + Math.cos(a) * l * t, by = cy + Math.sin(a) * l * t; x.lineWidth = 1.2; x.beginPath(); x.moveTo(bx, by); x.lineTo(bx + Math.cos(a + 1) * 6, by + Math.sin(a + 1) * 6); x.moveTo(bx, by); x.lineTo(bx + Math.cos(a - 1) * 6, by + Math.sin(a - 1) * 6); x.stroke(); } }
+		} else if (cls === '0') {         // sand and broken masonry
+			fill(215); speckle(3000, 175, 245, 1.2);
+			for (let i = 0; i < 45; i++) { const w = 8 + R() * 22, h = 6 + R() * 14, v = 165 + R() * 70 | 0; x.save(); x.translate(R() * S, R() * S); x.rotate(R() * 3); x.fillStyle = 'rgba(0,0,0,0.25)'; x.fillRect(-w / 2 + 3, -h / 2 + 3, w, h); x.fillStyle = g(v); x.fillRect(-w / 2, -h / 2, w, h); x.restore(); }
+		} else {                          // sandstone courses, offset like a wall, with carved glyphs and wear
+			fill(200);
+			const ch = cls === '3' ? 1 : 0.5, cw = cls === '1' ? 2 : 1;
+			for (let row = 0, y = 0; y < TER_TILE; row++, y += ch) for (let xx = row % 2 ? -cw / 2 : 0; xx < TER_TILE; xx += cw) {
+				const v = 185 + R() * 50 | 0, X0 = xx * px, Y0 = y * px;
+				x.fillStyle = g(v); x.fillRect(X0 + 2, Y0 + 2, cw * px - 4, ch * px - 4);
+				x.strokeStyle = g(110); x.lineWidth = 3; x.strokeRect(X0 + 1.5, Y0 + 1.5, cw * px - 3, ch * px - 3);
+				if (R() < 0.18) {   // a carved glyph: circle, triangle or bars
+					x.strokeStyle = g(120); x.lineWidth = 2; const cx = X0 + cw * px / 2, cy = Y0 + ch * px / 2, r = Math.min(cw, ch) * px * 0.25, k = R();
+					x.beginPath();
+					if (k < 0.33) x.arc(cx, cy, r, 0, 7); else if (k < 0.66) { x.moveTo(cx, cy - r); x.lineTo(cx + r, cy + r); x.lineTo(cx - r, cy + r); x.closePath(); } else { for (let j = -1; j <= 1; j++) { x.moveTo(cx - r, cy + j * r * 0.6); x.lineTo(cx + r, cy + j * r * 0.6); } }
+					x.stroke();
+				}
+			}
+			for (let i = 0; i < 12; i++) crack(6 + R() * 14, 1.6, 115);
+			speckle(1800, 160, 240, 1.1);
+		}
+		return true;
+	}
+	return false;
 }
 // texture coordinates in table inches: tops from x/z, sides along their face and up the height
 function inchUVs(geo, ox = 0, oz = 0, round = false) {
@@ -2177,9 +2267,10 @@ function inchUVs(geo, ox = 0, oz = 0, round = false) {
 }
 function addTerrainObj(t) {
 	const c = TERRAIN_CLS[t.cls] || TERRAIN_CLS['2'], g = new THREE.Group(), edgeMat = new THREE.LineBasicMaterial({ color: 0x9aa7b8 }), parts = [];
-	const h = Math.max(0.05, t.h), tex = terrainTexture(t.shape === 'grass' ? 'grass' : t.cls);
-	// dark Size colours need more light for their texture to show
-	const tint = new THREE.Color(c.color).multiplyScalar({ '3': 1.75, '2': 1.25, '1': 1.12 }[t.cls] || 1.2);
+	const h = Math.max(0.05, t.h), theme = terrainTheme(), tkey = t.shape === 'grass' ? 'grass' : t.cls, tex = terrainTexture(tkey, theme);
+	// dark Size colours need more light for their texture to show; a themed mat brings its own colours
+	const tint = theme === 'base' ? new THREE.Color(c.color).multiplyScalar({ '3': 1.75, '2': 1.25, '1': 1.12 }[t.cls] || 1.2)
+		: new THREE.Color(THEME_TINT[theme][tkey] ?? c.color).multiplyScalar(theme === 'station' ? 1.35 : 1);
 	const solid = () => new THREE.MeshStandardMaterial({ color: tint, roughness: 0.9, map: tex, bumpMap: tex, bumpScale: 0.6 });
 	const addBox = (w, d, x, z) => { const m = new THREE.Mesh(inchUVs(new THREE.BoxGeometry(w, h, d), x, z), solid()); m.position.set(x, h / 2, z); parts.push(m); };
 	if (t.shape === 'circle') {
@@ -2413,6 +2504,10 @@ function renderTerrainMaps() {
 	sel0.innerHTML = ms.length ? ms.map(([id, L]) => `<option value="${id}">${esc(L.name)} · rulebook page ${L.page}</option>`).join('') : '<option value="">No rulebook map for this table size</option>';
 	sel0.disabled = $('#terMapPlace').disabled = $('#terMapRoll').disabled = !ms.length;
 	$('#terMapRoll').textContent = ms.length ? `Roll D${ms.length}` : 'Roll';
+}
+function restyleTerrain() {
+	for (const t of state.terrain) { removeObj(t.id); addTerrainObj(t); }
+	applySelectionVisual();
 }
 function addTerrainPiece(p) {
 	const t = normTerrain({ ...p, id: newId('t'), x: 0, z: 0, rot: 0 });
@@ -5929,7 +6024,9 @@ function applyRemoteMeta(d) {
 	if (JSON.stringify(remote.ctl) !== JSON.stringify(state.ctl)) { state.ctl = remote.ctl; objSig = ''; }
 	if (JSON.stringify(remote.clock) !== JSON.stringify(state.clock)) { state.clock = remote.clock; renderClock(); }
 	if (w !== state.table.w || dd !== state.table.d || remote.table.mat !== state.table.mat || remote.table.deploy !== state.table.deploy) {
+		const matChanged = remote.table.mat !== state.table.mat;
 		Object.assign(state.table, { w, d: dd, mat: remote.table.mat, deploy: remote.table.deploy }); buildTable(); syncTableInputs(); renderMatPick();
+		if (matChanged) restyleTerrain();
 		if (!net.metaLoaded) fitView();
 	}
 	if (remote.table.lockTerrain !== state.table.lockTerrain) setTerrainLock(remote.table.lockTerrain, true);
