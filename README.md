@@ -31,7 +31,7 @@ Right-click a model and choose **Activated in the Movement Phase** (an arrow) or
 
 No game cards ship with the page. If you have your own card library file (`skirmish-library.json`), load it under **Setup › Card library** and the page matches units to their cards. Health, Shield and Coherency are then filled in from the card, an upgrade that raises Health outright (Kinetic Foam) adds to it, and a unit's supply follows the card's models/supply table: as models are removed or destroyed, the unit counts the supply for the models it has left. The supply a unit loses is scored automatically as **Supply destroyed** for the other player in the current round (undo takes it back; − and + in the score table correct it). For units without a card, type Health and Shield once on the unit card and the page remembers them for that unit type.
 
-Damage is marked on the unit: each point goes to the model already wounded, else the next one from the back of the unit (specialists last), and a model is destroyed when its Health runs out. Click a model in the Reserves to see its card.
+Shield is one pool for the whole unit (the card's value, e.g. 3 for a unit of Zealots, not 3 per model): it takes damage first and shows as one blue number on the unit's first model; **Recharge shield** fills it again. Health damage is marked on the unit too: each point goes to the model already wounded, else the next one from the back of the unit (specialists last), and a model is destroyed when its Health runs out. Click a model in the Reserves to see its card.
 
 ## Missions
 

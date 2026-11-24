@@ -1905,19 +1905,26 @@ function upgradeBonus(u, card) {
 }
 function healthOf(m) {
 	const st = statsOf(m.unit);
-	return { ...st, h: Math.max(0, st.hp - (m.dmgH || 0)), s: Math.max(0, st.sh - (m.dmgS || 0)) };
+	return { ...st, h: Math.max(0, st.hp - (m.dmgH || 0)), s: unitShield(m.unit, st).left };
 }
+// the unit's Shield: one pool for all its models
+function unitShield(unitId, st = statsOf(unitId)) {
+	const taken = state.minis.reduce((a, x) => a + (x.unit === unitId && !x.tok ? x.dmgS || 0 : 0), 0);
+	return { max: st.sh, taken, left: Math.max(0, st.sh - taken) };
+}
+// the model that shows the unit's Shield on its base: its first model on the table still alive
+const shieldHolder = unitId => state.minis.find(x => x.unit === unitId && !x.tok && !x.reserve && !(x.dmgH && statsOf(unitId).hp && x.dmgH >= statsOf(unitId).hp));
 // numbers on the base once a model has taken damage: shield (blue) and health (red); a dead model is crossed out
 function drawDamage(x, c, ri, m) {
-	const d = healthOf(m);
-	if (!d.hp || (!m.dmgH && !m.dmgS)) return;
+	const d = healthOf(m), showSh = d.sh && d.s < d.sh && shieldHolder(m.unit)?.id === m.id;
+	if (!d.hp || (!m.dmgH && !showSh)) return;
 	if (d.h === 0) {
 		x.fillStyle = 'rgba(8,10,14,0.62)'; x.beginPath(); x.arc(c, c, ri, 0, 7); x.fill();
 		x.strokeStyle = '#e5484d'; x.lineWidth = ri * 0.16; x.lineCap = 'round';
 		const k = ri * 0.5; x.beginPath(); x.moveTo(c - k, c - k); x.lineTo(c + k, c + k); x.moveTo(c + k, c - k); x.lineTo(c - k, c + k); x.stroke();
 		return;
 	}
-	const pills = (d.sh ? [[d.s, '#2f7de1']] : []).concat([[d.h, '#d8434b']]);
+	const pills = (showSh ? [[d.s, '#2f7de1']] : []).concat(m.dmgH || showSh ? [[d.h, '#d8434b']] : []);
 	const pw = ri * 0.64, ph = ri * 0.5, gap = ri * 0.08, total = pills.length * pw + (pills.length - 1) * gap;
 	let px = c - total / 2; const py = c - ri * 0.86;
 	x.font = `700 ${Math.round(ri * 0.44)}px "Chakra Petch", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
@@ -1928,12 +1935,12 @@ function drawDamage(x, c, ri, m) {
 		px += pw + gap;
 	}
 }
-function dmgSig(m) { const d = healthOf(m); return (m.dmgH || m.dmgS) && d.hp ? `${d.h}/${d.s}/${d.sh ? 1 : 0}` : ''; }
+function dmgSig(m) { const d = healthOf(m), sh = d.sh && d.s < d.sh && shieldHolder(m.unit)?.id === m.id; return (m.dmgH || sh) && d.hp ? `${d.h}/${sh ? d.s : '-'}` : ''; }
 // the unit's models, in the order they take damage: one already wounded first, then from the back of the unit,
 // specialists last; models in reserves cannot be hit
 function damageOrder(unitId) {
 	const ms = state.minis.filter(x => x.unit === unitId && !x.tok && !x.reserve);
-	const hurt = x => (x.dmgH || 0) + (x.dmgS || 0) > 0;
+	const hurt = x => (x.dmgH || 0) > 0;
 	return ms.filter(x => !isDead(x)).sort((a, b) => (hurt(b) - hurt(a)) || ((!!a.spec) - (!!b.spec)) || (ms.indexOf(b) - ms.indexOf(a)));
 }
 // delta > 0 takes that much damage on the unit, delta < 0 heals it back (the model wounded last first)
@@ -1945,7 +1952,7 @@ function setDamage(m, key, delta) {
 	for (let k = 0; k < Math.abs(delta); k++) {
 		if (delta > 0) {
 			const order = damageOrder(m.unit);
-			const t = key === 'dmgS' ? order.find(x => healthOf(x).s > 0) : order[0];
+			const t = key === 'dmgS' ? (unitShield(m.unit).left > 0 ? order[0] : null) : order[0];
 			if (!t) break;
 			t[key] = (t[key] || 0) + 1;
 			if (key === 'dmgH' && healthOf(t).h === 0) killed.push(t);
@@ -1959,7 +1966,7 @@ function setDamage(m, key, delta) {
 	const items = [...before.values()].filter(b => { const x = findMini(b.id); return x && ((x.dmgH || 0) !== b.dmgH || (x.dmgS || 0) !== b.dmgS); });
 	if (!items.length) return;
 	undoStack.push({ t: 'dmg', items });
-	for (const b of items) refreshFace(objs.get(b.id));
+	for (const x of state.minis) if (x.unit === m.unit) refreshFace(objs.get(x.id));   // the Shield shows on the unit's first model
 	renderLists(); renderCard(); save();
 	for (const t of killed) toast(`${esc(t.name)} is destroyed` + (lastKillMsg ? `: ${lastKillMsg}` : '. Remove it, or another model of the unit, from the table'));
 }
@@ -1969,7 +1976,8 @@ function rechargeShields(m) {
 	undoStack.push({ t: 'dmg', items: ms.map(x => ({ id: x.id, dmgH: x.dmgH || 0, dmgS: x.dmgS })) });
 	for (const x of ms) { x.dmgS = 0; refreshFace(objs.get(x.id)); }
 	renderCard(); save();
-	toast(`Shields recharged on ${ms.length} model${ms.length > 1 ? 's' : ''}`);
+	for (const x of unitModels(m)) refreshFace(objs.get(x.id));
+	toast('Shield recharged');
 }
 function dmgHtml(m) {
 	const d = healthOf(m);
@@ -1981,9 +1989,9 @@ function dmgHtml(m) {
 			<button data-dmg="${key}" data-v="1" aria-label="The unit takes 1 ${label} damage">−</button>
 			<span class="supval">${l}/${max}<small>${label.toLowerCase()}</small></span>
 			<button data-dmg="${key}" data-v="-1" aria-label="Restore 1 ${label} to the unit">+</button></span>`;
-	const hurt = damageOrder(m.unit).find(x => (x.dmgH || 0) + (x.dmgS || 0) > 0);
-	return `<div class="dmgbox"><span class="note">Unit damage</span>${d.sh ? slot('sh', 'Shield', 'dmgS', left('s'), d.sh * all) : ''}${slot('hp', 'Health', 'dmgH', left('h'), d.hp * all)}
-		${d.sh && ms.some(x => x.dmgS) ? '<button class="btn" id="cardRecharge" title="Every model in this unit back to full Shield">Recharge shields</button>' : ''}
+	const hurt = damageOrder(m.unit).find(x => (x.dmgH || 0) > 0);
+	return `<div class="dmgbox"><span class="note">Unit damage</span>${d.sh ? slot('sh', 'Shield', 'dmgS', unitShield(m.unit).left, d.sh) : ''}${slot('hp', 'Health', 'dmgH', left('h'), d.hp * all)}
+		${d.sh && ms.some(x => x.dmgS) ? '<button class="btn" id="cardRecharge" title="The unit’s Shield back to full">Recharge shield</button>' : ''}
 		<span class="note">${lost ? `${lost} of ${all} models destroyed` : `${all} model${all === 1 ? '' : 's'}, ${d.hp} Health each`}${d.up?.names.length ? ` (${esc(d.up.names.join(', '))})` : ''}${hurt ? ` · ${esc(hurt.name)} is wounded` : ''}</span>
 		${d.h === 0 ? '<span class="note dead">This model is destroyed</span>' : ''}</div>`;
 }
@@ -3259,8 +3267,8 @@ function undo() {
 		const u = findUnit(a.unit);
 		if (u) { u.tokens = a.tokens; renderCard(); }
 	} else if (a.t === 'dmg') {
-		for (const p of a.items) { const m = findMini(p.id); if (m) { m.dmgH = p.dmgH; m.dmgS = p.dmgS; refreshFace(objs.get(m.id)); } }
-		renderLists(); renderCard();
+		for (const p of a.items) { const m = findMini(p.id); if (m) { m.dmgH = p.dmgH; m.dmgS = p.dmgS; } }
+		refreshAllFaces(); renderLists(); renderCard();
 	} else if (a.t === 'moves') {    // a whole unit's move
 		for (const p of a.items) { const m = findMini(p.id); if (m) { m.x = p.from.x; m.z = p.from.z; objs.get(m.id)?.g.position.set(m.x, 0, m.z); } }
 		syncRanges(); updateMeasure();
@@ -5747,6 +5755,7 @@ function applyRemotePiece(id, b) {
 		if (glowed) refreshGlow(objs.get(id));
 		if (rebuild) rebuildMini(ex);   // also brings a model onto the table from reserves, or takes it off
 		else { objs.get(id)?.g.position.set(ex.x, 0, ex.z); if (face) refreshFace(objs.get(id)); }
+		if (face) for (const x of state.minis) if (x.unit === ex.unit && x.id !== id) refreshFace(objs.get(x.id));
 	} else { state.minis.push(item); addMiniObj(item); }
 }
 function applyRemoteTac(id, b) {
