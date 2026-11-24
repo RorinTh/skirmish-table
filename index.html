@@ -4056,11 +4056,11 @@ function armyPieces(plan, player) {
 	const units = [], minis = [];
 	for (const u of plan) {
 		const unit = newId('u');
-		units.push({ id: unit, name: u.name, player, supply: u.supply, card: u.card?.id || null, upgrades: u.upgrades, listed: true });
+		units.push({ id: unit, name: u.name, player, supply: u.supply || (u.card ? 0 : exampleSupply(u.name, u.total)), card: u.card?.id || null, upgrades: u.upgrades, listed: true });
 		let n = 0;
 		const made = [];
 		for (const mt of u.models) for (let i = 0; i < mt.count; i++) {
-			const c = mt.card || u.card, baseMm = c?.baseMm || 32;
+			const c = mt.card || u.card, baseMm = c?.baseMm || exampleBase(mt.name) || 32;
 			made.push({ id: newId('m'), name: (u.total > 1 ? `${mt.name} ${++n}` : mt.name).slice(0, 40), player, baseMm, img: c?.portrait || null, x: 0, z: 0, unit, reserve: true, spec: null });
 		}
 		const specs = (u.card?.weapons || []).filter(w => w?.upgrade && /SPECIALIST/i.test(w.keywords || '') && u.upgrades.some(x => cardKey(x) === cardKey(w.name)));
@@ -4124,49 +4124,59 @@ function planArmy(list) {
 }
 // ---- the six example armies of the rulebook (12.12 Example Armies): units, models, upgrades and cards,
 // written out as a New Recruit style list so they go through the same import
+// units: [name, Minerals, upgrades, [[models, model name, base mm]], supply]; base and supply are used when no card is loaded
 const EXAMPLE_ARMIES = [
 	{ name: 'Terran Armed Forces', race: 'Terran', faction: 'Terran Armed Forces', cards: [['Factory', '35 Vespene Gas'], ['Barracks', '25 Vespene Gas'], ['Orbital Command', '25 Vespene Gas']],
 		missions: ['Supply Drop', 'Gather the Resources'], deployments: ['Abandoned Camp', 'Agria Valley'], units: [
-		['Marines', 280, 'Combat Shield, Grenades - Frag, Bayonet', [[9, 'Marine']]],
-		['Marauders', 190, 'Veteran of Tarsonis, Kinetic Foam', [[2, 'Marauder']]],
-		['Goliath', 220, 'Scatter Missiles', [[1, 'Goliath']]],
-		['Marauders', 170, 'Laser Targeting Systems', [[2, 'Marauder']]],
-		['Medics', 140, 'Stabilizer Medpacks', [[3, 'Medic']]]] },
+		['Marines', 280, 'Combat Shield, Grenades - Frag, Bayonet', [[9, 'Marine', 32]], 2],
+		['Marauders', 190, 'Veteran of Tarsonis, Kinetic Foam', [[2, 'Marauder', 50]], 1],
+		['Goliath', 220, 'Scatter Missiles', [[1, 'Goliath', 80]], 2],
+		['Marauders', 170, 'Laser Targeting Systems', [[2, 'Marauder', 50]], 1],
+		['Medics', 140, 'Stabilizer Medpacks', [[3, 'Medic', 32]], 1]] },
 	{ name: "Raynor's Raiders (Founders Edition)", race: 'Terran', faction: "Raynor's Raiders", cards: [['Academy', '35 Vespene Gas'], ['Barracks', '25 Vespene Gas'], ['Orbital Command', '25 Vespene Gas']],
 		missions: ['Supply Drop', 'Divide and Conquer'], deployments: ['Agria Valley', 'Dirt Side'], units: [
-		['Marines', 210, 'AGG-12, Rocket Launcher', [[6, 'Marine']]],
-		['Marauders', 170, 'Kinetic Foam', [[2, 'Marauder']]],
-		['Jim Raynor', 250, '', [[1, 'Jim Raynor']]],
-		["Raynor's Raiders (Marine)", 230, '', [[6, "Raynor's Raider"]]],
-		['Medics', 140, 'Stabilizer Medpacks', [[3, 'Medic']]]] },
+		['Marines', 210, 'AGG-12, Rocket Launcher', [[6, 'Marine', 32]], 1],
+		['Marauders', 170, 'Kinetic Foam', [[2, 'Marauder', 50]], 1],
+		['Jim Raynor', 250, '', [[1, 'Jim Raynor', 40]], 1],
+		["Raynor's Raiders (Marine)", 230, '', [[6, "Raynor's Raider", 32]], 1],
+		['Medics', 140, 'Stabilizer Medpacks', [[3, 'Medic', 32]], 1]] },
 	{ name: 'Zerg Swarm', race: 'Zerg', faction: 'Zerg Swarm', cards: [['Evolution Chamber', '30 Vespene Gas'], ['Hydralisk Den', '35 Vespene Gas'], ['Accelerating Creep', '0 Vespene Gas'], ['Overseer', '25 Vespene Gas']],
 		missions: ['Gather the Resources', 'Supply Drop'], deployments: ['Dirt Side', 'Abandoned Camp'], units: [
-		['Swarmlings (Zergling)', 260, '', [[18, 'Swarmling']]],
-		['Hydralisks', 300, 'Ancillary Carapace', [[4, 'Hydralisk']]],
-		['Corpsers (Roach)', 280, 'Burrow Ambush, Tunneling Claws, Hydriodic Bile', [[3, 'Corpser']]],
-		['Queen', 160, 'Creep Speed', [[1, 'Queen']]]] },
+		['Swarmlings (Zergling)', 260, '', [[18, 'Swarmling', 32]], 1],
+		['Hydralisks', 300, 'Ancillary Carapace', [[4, 'Hydralisk', 40]], 3],
+		['Corpsers (Roach)', 280, 'Burrow Ambush, Tunneling Claws, Hydriodic Bile', [[3, 'Corpser', 50]], 1],
+		['Queen', 160, 'Creep Speed', [[1, 'Queen', 80]], 1]] },
 	{ name: "Kerrigan's Swarm (Founders Edition)", race: 'Zerg', faction: "Kerrigan's Swarm", cards: [['Evolution Chamber', '30 Vespene Gas'], ['Spawning Pool', '25 Vespene Gas'], ['Malignant Creep', '10 Vespene Gas'], ['Overseer', '25 Vespene Gas']],
 		missions: ['Hold Position', 'Frontlines'], deployments: ['Char Plains', 'Frontier'], units: [
-		['Zerglings', 180, '', [[12, 'Zergling']]],
-		['Roaches', 170, '', [[3, 'Roach']]],
-		['Kerrigan', 250, '', [[1, 'Kerrigan']]],
-		['Kerrigan Swarm Raptors (Zergling)', 250, '', [[6, 'Kerrigan Swarm Raptor']]],
-		['Queen', 150, '', [[1, 'Queen']]]] },
+		['Zerglings', 180, '', [[12, 'Zergling', 32]], 1],
+		['Roaches', 170, '', [[3, 'Roach', 50]], 1],
+		['Kerrigan', 250, '', [[1, 'Kerrigan', 40]], 1],
+		['Kerrigan Swarm Raptors (Zergling)', 250, '', [[6, 'Kerrigan Swarm Raptor', 32]], 1],
+		['Queen', 150, '', [[1, 'Queen', 80]], 1]] },
 	{ name: 'Protoss Daelaam', race: 'Protoss', faction: 'Daelaam', cards: [['Twilight Council', '45 Vespene Gas'], ['Forge', '30 Vespene Gas'], ['Observer', '25 Vespene Gas']],
 		missions: ['Hold Position', 'Gather the Resources'], deployments: ['Abandoned Camp', 'Frontier'], units: [
-		['Zealots', 210, 'My Life for Aiur, Leg Enhancements, We Stand as One', [[3, 'Zealot']]],
-		['Sentries', 180, 'Solid-Field Projectors, Hallucination', [[2, 'Sentry']]],
-		['Adepts', 190, 'Resonating Glaives, Glaive Strike', [[4, 'Adept']]],
-		['Stalker', 210, 'Path of Shadows, Fury of the Nerazim', [[1, 'Stalker']]],
-		['Stalker', 210, 'Path of Shadows, Fury of the Nerazim', [[1, 'Stalker']]]] },
+		['Zealots', 210, 'My Life for Aiur, Leg Enhancements, We Stand as One', [[3, 'Zealot', 40]], 2],
+		['Sentries', 180, 'Solid-Field Projectors, Hallucination', [[2, 'Sentry', 50]], 1],
+		['Adepts', 190, 'Resonating Glaives, Glaive Strike', [[4, 'Adept', 40]], 1],
+		['Stalker', 210, 'Path of Shadows, Fury of the Nerazim', [[1, 'Stalker', 80]], 1],
+		['Stalker', 210, 'Path of Shadows, Fury of the Nerazim', [[1, 'Stalker', 80]], 1]] },
 	{ name: 'Protoss Khalai (Founders Edition)', race: 'Protoss', faction: 'Khalai', cards: [['Warp Prism', '35 Vespene Gas'], ['Gateway', '25 Vespene Gas'], ['Observer', '25 Vespene Gas']],
 		missions: ['Frontlines', 'Divide and Conquer'], deployments: ['Frontier', 'Char Plains'], units: [
-		['Zealots', 170, 'My Life for Aiur', [[3, 'Zealot']]],
-		['Adepts', 170, 'Glaive Strike', [[4, 'Adept']]],
-		['Praetor Guard (Zealot)', 280, '', [[3, 'Praetor Guard']]],
-		['Sentries', 130, '', [[2, 'Sentry']]],
-		['Artanis', 250, '', [[1, 'Artanis']]]] }
+		['Zealots', 170, 'My Life for Aiur', [[3, 'Zealot', 40]], 2],
+		['Adepts', 170, 'Glaive Strike', [[4, 'Adept', 40]], 1],
+		['Praetor Guard (Zealot)', 280, '', [[3, 'Praetor Guard', 40]], 2],
+		['Sentries', 130, '', [[2, 'Sentry', 50]], 1],
+		['Artanis', 250, '', [[1, 'Artanis', 40]], 1]] }
 ];
+// base sizes and supply the example armies give, for units without a loaded card
+function exampleBase(model) {
+	for (const a of EXAMPLE_ARMIES) for (const u of a.units) for (const [, m, mm] of u[3]) if (m.toLowerCase() === String(model).toLowerCase() && mm) return mm;
+	return 0;
+}
+function exampleSupply(unit, count) {
+	for (const a of EXAMPLE_ARMIES) for (const u of a.units) if (u[0].toLowerCase() === String(unit).toLowerCase() && u[3].reduce((t, x) => t + x[0], 0) === count) return u[4] || 0;
+	return 0;
+}
 function exampleArmyText(a) {
 	return [`${a.race} - ${a.name} (example army, rulebook 12.12)`, '',
 		'## Pre-Game', `Missions: ${a.missions.join(', ')}`, `Deployment Maps: ${a.deployments.join(', ')}`, '',

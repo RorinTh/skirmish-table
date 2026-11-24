@@ -8,7 +8,7 @@ There is nothing to build or install: `index.html` is the game, and `p2p.js` add
 
 ## A new game
 
-A new game starts with two of the rulebook's 1000 Minerals example armies in the reserves: Raynor's Raiders for Player 1 and Kerrigan's Swarm for Player 2, with their Faction and Tactical cards, on the **Abandoned Camp** deployment with the **Frontlines** mission. With the card library loaded they get their bases, portraits and specialists; without it they wait on 32 mm bases. Import your own lists in Setup (tick *Remove this player's models first*), or **Load example** under Save & load to start over.
+A new game starts with two of the rulebook's 1000 Minerals example armies in the reserves: Raynor's Raiders for Player 1 and Kerrigan's Swarm for Player 2, with their Faction and Tactical cards, on the **Abandoned Camp** deployment with the **Frontlines** mission. The example armies carry their base sizes and supply, so they are right without a card library; with it loaded they also get portraits and specialists. Import your own lists in Setup (tick *Remove this player's models first*), or **Load example** under Save & load to start over.
 
 ## Setup and Play
 
