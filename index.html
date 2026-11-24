@@ -574,7 +574,7 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 				<div class="players" id="players"></div>
 			
 				<h3 id="listH">Import an army list</h3>
-				<p class="note" title="Its units go to the player's reserves, with bases, supply and portraits from your card library when it is loaded, and its Faction and Tactical cards to the card tracker">Paste a New Recruit list, or pick an example army.</p>
+				<p class="note" title="Its units go to the player's reserves, with bases, supply and portraits from your card library when it is loaded, and its Faction and Tactical cards to the card tracker">Paste a list from New Recruit or stimpacked.com, or pick an example army.</p>
 				<div class="field">
 					<label>Player</label>
 					<div class="pick" id="listPlayer"></div>
@@ -4395,6 +4395,7 @@ function armyPieces(plan, player) {
 // followed by model lines "• 3x Zealot". A unit with no model lines (a hero) is one model. Pre-Game, Faction and
 // Tactical sections hold no models.
 function parseArmyList(text) {
+	if (/^\s*Units:\s*$/m.test(String(text || '')) && /\bpts\b/.test(text)) return parseStimpacked(text);
 	const lines = String(text || '').split(/\r?\n/).map(l => l.trim());
 	const first = lines.find(l => l && !l.startsWith('#')) || '';
 	const faction = first.includes(' - ') ? first.split(' - ')[0].trim() : '';
@@ -4420,8 +4421,62 @@ function parseArmyList(text) {
 	for (const u of units) if (!u.models.length) u.models.push({ count: 1, name: u.name });
 	// "Deployment Maps: Breach, Typhoon" names the deployments this list brings to the draft
 	const depLine = pregame.find(l => /^deployment/i.test(l)) || '';
-	const deployments = depLine.replace(/^[^:]*:/, '').split(',').map(s => s.trim()).map(n => Object.keys(DEPLOYMENTS).find(k => DEPLOYMENTS[k].name.toLowerCase() === n.toLowerCase())).filter(Boolean);
-	return { faction, units, pregame, cards, deployments };
+	const deployments = depLine.replace(/^[^:]*:/, '').split(',').map(s => s.trim()).map(depKey).filter(Boolean);
+	const misLine = pregame.find(l => /^missions?/i.test(l)) || '';
+	const missions = misLine.replace(/^[^:]*:/, '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 4);
+	return { faction, units, pregame, cards, deployments, missions };
+}
+const depKey = n => Object.keys(DEPLOYMENTS).find(k => DEPLOYMENTS[k].name.toLowerCase() === String(n).trim().toLowerCase());
+const SIZE_BAND = { small: 0, medium: 1, large: 1 };
+// models in each purchasable unit size (Small, Large), from the official Cost Table (10.2026)
+const UNIT_SIZES = {
+	'marine': [6, 9], 'marauder': [2, 4], 'medic': [3], 'goliath': [1], 'jim raynor': [1], 'raynor s raiders': [6], 'siege tank': [1],
+	'nova': [1], 'spec ops marauder': [2], 'raven': [1],
+	'zergling': [12, 18], 'raptor': [12, 18], 'roach': [3], 'vile': [3], 'corpser': [3], 'swarmling': [18], 'kerrigan swarm raptor': [6],
+	'kerrigan': [1], 'zagara': [1], 'vileling': [18], 'bile launcher': [1], 'hydralisk': [2, 4], 'queen': [1], 'ravager': [1, 2], 'defiler': [1],
+	'zealot': [3], 'praetor guard': [3], 'artanis': [1], 'zeratul': [1], 'nerazim watchers': [4], 'adept': [4], 'sentry': [2], 'stalker': [1, 2],
+	'immortal': [1], 'tassadar': [1], 'twilight templar': [2], 'high templar': [2, 4]
+};
+function sizedCount(name, size, card) {
+	const keys = [name, card?.name].map(cardKey), i = SIZE_BAND[size] ?? 0;
+	for (const key of keys) {
+		const k1 = key.replace(/s$/, ''), sz = UNIT_SIZES[key] || UNIT_SIZES[k1] || Object.entries(UNIT_SIZES).find(([n]) => key.startsWith(n + ' '))?.[1];
+		if (sz) return sz[Math.min(i, sz.length - 1)];
+	}
+	// not in the table: the card's models / supply band
+	const band = card?.modelsSupply?.length ? card.modelsSupply[Math.min(i, card.modelsSupply.length - 1)] : null, hi = band && /(\d+)\s*$/.exec(band.models);
+	return hi ? +hi[1] : 1;
+}
+function parseStimpacked(text) {
+	const lines = String(text || '').split(/\r?\n/), units = [], cards = [], deployments = [], missions = [], pregame = [];
+	const head = lines.map(l => l.trim()).filter(Boolean);
+	// line 1 "List name — Race", line 2 the faction (e.g. Khalai)
+	const race = (/[—–-]\s*(Terran|Zerg|Protoss)\s*$/i.exec(head[0] || '') || [])[1] || '';
+	const faction = head[1] && !/:$/.test(head[1]) ? head[1].slice(0, 40) : race;
+	if (faction) cards.push(faction);   // its Faction card
+	let section = '', cur = null;
+	for (const raw of lines) {
+		const l = raw.trim();
+		if (!l) continue;
+		const sec = /^(Units|Tactical Cards|Draft Kit|Totals?)\s*:/i.exec(l);
+		if (sec) { section = sec[1].toLowerCase(); cur = null; continue; }
+		if (section === 'units') {
+			const up = /^\+\s*(.+?)\s*(?:\(\s*\+?\d+\s*\))?\s*$/.exec(l);
+			if (up && cur) { if (cur.upgrades.length < 12) cur.upgrades.push(up[1].slice(0, 40)); continue; }
+			const u = /^(.+?)\s*(?:\((Small|Medium|Large)\))?\s*[—–-]+\s*(\d+)\s*pts?\b/i.exec(l);
+			if (u) { cur = { name: u[1].trim().slice(0, 40), section: 'Units', cost: u[3] + ' pts', upgrades: [], size: (u[2] || '').toLowerCase() || null, models: [] }; units.push(cur); }
+		} else if (section === 'tactical cards') {
+			const c = /^(.+?)\s*[—–-]+\s*\d+/.exec(l) || /^(.+)$/.exec(l);
+			if (c && cards.length < 30) cards.push(c[1].trim().slice(0, 40));
+		} else if (section === 'draft kit') {
+			pregame.push(l);
+			const d = /^deployment\s*:\s*(.+)$/i.exec(l), m = /^mission\s*:\s*(.+)$/i.exec(l);
+			if (d && depKey(d[1])) deployments.push(depKey(d[1]));
+			if (m) missions.push(m[1].trim().slice(0, 40));
+		}
+	}
+	for (const u of units) u.models.push({ count: 1, name: u.name, size: u.size });
+	return { faction, race, units, pregame, cards, deployments, missions, format: 'stimpacked' };
 }
 // match a list name to a card: exact, then without plural "s"/"ies", then ignoring "(...)" on the card; same faction first
 const cardKey = s => String(s || '').toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -4447,7 +4502,10 @@ const EXTRA_UNITS = [
 ];
 function planArmy(list) {
 	const plan = list.units.map(u => {
-		const models = u.models.map(m => { const c = findCardFor(m.name, list.faction) || findCardFor(u.name, list.faction); return { ...m, card: c }; });
+		const models = u.models.map(m => {
+			const c = findCardFor(m.name, list.faction) || findCardFor(u.name, list.faction);
+			return { ...m, card: c, count: m.size ? Math.min(30, sizedCount(u.name, m.size, c)) : m.count };
+		});
 		const card = findCardFor(u.name, list.faction) || models[0].card || null;
 		const total = models.reduce((s, m) => s + m.count, 0);
 		return { ...u, models, card, total, supply: supplyFor(card, total) ?? 0 };
@@ -4546,12 +4604,21 @@ function renderListPreview() {
 	const models = plan.reduce((s, u) => s + u.total, 0), supply = plan.reduce((s, u) => s + u.supply, 0), missing = plan.filter(u => !u.card).length;
 	$('#listPreview').innerHTML = `<p class="note">${esc(list.faction || 'Army')}: ${plural(plan.length, 'unit')}, ${plural(models, 'model')}, ${supply} supply.`
 		+ (!LIB ? ' Load the card library to get bases, supply and portraits.' : missing ? ` ${missing} without a card get 32 mm bases.` : '') + `</p>`
-		+ `<ul class="ulist">${plan.map(u => `<li>${u.card?.portrait ? `<span class="thumb" style="border-color:var(--line)"><img src="${esc(u.card.portrait)}" alt=""></span>` : ''}<span class="nm"><b>${esc(u.name)}</b> · ${u.models.map(m => `${m.count}× ${esc(m.name)}`).join(', ')}`
+		+ `<ul class="ulist">${plan.map(u => `<li>${u.card?.portrait ? `<span class="thumb" style="border-color:var(--line)"><img src="${esc(u.card.portrait)}" alt=""></span>` : ''}<span class="nm"><b>${esc(u.name)}</b> · ${u.models.map(m => `${m.count}× ${esc(m.name)}${m.size ? ` (${m.size})` : ''}`).join(', ')}`
 			+ `${u.upgrades.length ? `<br><span class="note">${esc(u.upgrades.join(', '))}</span>` : ''}${u.extra ? `<br><span class="note">from ${esc(u.extra)}</span>` : ''}</span><span class="mm">${u.card ? `${u.supply} sup` : 'no card'}</span></li>`).join('')}</ul>`
 		+ (list.cards.length ? `<p class="note">Tactical cards: ${list.cards.map(n => { const t = tacticFrom(n, 0, list.faction); return `${esc(t.name)} (${t.value} ${t.res})`; }).join(', ')}</p>` : '')
-		+ (list.deployments.length ? `<p class="note">Deployments in this list: ${list.deployments.map(k => `<button type="button" class="btn" data-dep="${k}">${esc(DEPLOYMENTS[k].name)}</button>`).join(' ')}</p>` : '');
+		+ (list.deployments.length ? `<p class="note">Deployments in this list: ${list.deployments.map(k => `<button type="button" class="btn" data-dep="${k}">${esc(DEPLOYMENTS[k].name)}</button>`).join(' ')}</p>` : '')
+		+ (list.missions?.length ? `<p class="note">Missions in this list: ${list.missions.map(n => `<button type="button" class="btn" data-mis="${esc(n)}">${esc(n)}</button>`).join(' ')}</p>` : '')
+		+ (plan.some(u => u.models.some(m => m.size)) ? `<p class="note">Unit sizes: Small and Large are the model counts of the official Cost Table (Marines 6 or 9, Zealots 3).</p>` : '');
 }
-$('#listPreview').addEventListener('click', e => { const b = e.target.closest('button[data-dep]'); if (b) setDeployment(b.dataset.dep); });
+$('#listPreview').addEventListener('click', e => {
+	const b = e.target.closest('button[data-dep]'); if (b) setDeployment(b.dataset.dep);
+	const m = e.target.closest('button[data-mis]');
+	if (m) {   // the mission at the size of the table
+		const key = normMission(`${m.dataset.mis} · ${state.table.w <= 40 ? 'Skirmish Level' : 'Standard Engagement'}`);
+		if (key) { state.table.mission = key; renderMissionSel(); buildTable(); save(); applyMissionSupply(); toast(`Mission: ${esc(key)}`); }
+	}
+});
 $('#listText').addEventListener('input', () => renderListPreview());
 $('#listAdd').addEventListener('click', () => {
 	const list = parseArmyList($('#listText').value), plan = planArmy(list), player = listPlayer;

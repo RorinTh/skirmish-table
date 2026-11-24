@@ -63,6 +63,10 @@ Right-click an empty spot of the table and choose **Place faction token here…*
 
 Each player's Faction and Tactical cards sit in the board's right corners, Player 2 at the top and Player 1 at the bottom, with every card always in view. Click **Ready** / **Used** to exhaust or ready a card; the counter shows what is still available. **+** opens a row to add a card or ready them all. The **i** above the bottom panel explains the cards when you point at it.
 
+## Army lists from stimpacked.com
+
+**Import army list** also reads the text export of [stimpacked.com](https://stimpacked.com): its units with their upgrades, its Tactical Cards (and the faction's own card), and its Draft Kit, whose missions and deployments show as buttons in the preview. Stimpacked gives a unit size instead of a model count: Small and Large are the model counts of the official Cost Table (Marines 6 or 9, Zealots 3, Adepts 4, Stalkers 1 or 2).
+
 ## Units a card brings
 
 Some cards set an extra unit on the battlefield that the list does not buy. Importing a list (or an example army) puts those in the reserves too, at 0 supply: the Point Defense Drone (Raynor's Raiders), the Pylon (Khalai), the Omega Worm (Kerrigan's Swarm), the Sabotage Drone (Nova Covert Ops), the Holo Decoy (Nova), the Auto-Turret (Raven) and three Roachlings (Corpser). The import preview shows which card each comes from.
