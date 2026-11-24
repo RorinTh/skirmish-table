@@ -4060,7 +4060,7 @@ function armyPieces(plan, player) {
 		let n = 0;
 		const made = [];
 		for (const mt of u.models) for (let i = 0; i < mt.count; i++) {
-			const c = mt.card || u.card, baseMm = c?.baseMm || exampleBase(mt.name) || 32;
+			const c = mt.card || u.card, baseMm = c?.baseMm || mt.baseMm || exampleBase(mt.name) || 32;
 			made.push({ id: newId('m'), name: (u.total > 1 ? `${mt.name} ${++n}` : mt.name).slice(0, 40), player, baseMm, img: c?.portrait || null, x: 0, z: 0, unit, reserve: true, spec: null });
 		}
 		const specs = (u.card?.weapons || []).filter(w => w?.upgrade && /SPECIALIST/i.test(w.keywords || '') && u.upgrades.some(x => cardKey(x) === cardKey(w.name)));
@@ -4114,13 +4114,32 @@ function findCardFor(name, faction) {
 	return null;
 }
 // what will be placed, per unit: its card (the unit's own, else its first model's) and each model type's base and portrait
+// by: the Faction card (card) or unit (unit) that brings it; count: models; base: mm when no card is loaded
+const EXTRA_UNITS = [
+	{ card: "Raynor's Raiders", name: 'Point Defense Drone', count: 1, base: 32 },
+	{ card: 'Khalai', name: 'Pylon', count: 1, base: 80 },
+	{ card: "Kerrigan's Swarm", name: 'Omega Worm', count: 1, base: 80 },
+	{ card: 'Nova Covert Ops', name: 'Sabotage Drone', count: 1, base: 40 },
+	{ unit: 'Nova', name: 'Holo Decoy', count: 1, base: 32 },
+	{ unit: 'Raven', name: 'Auto-Turret', count: 1, base: 40 },
+	{ unit: 'Corpser', name: 'Roachling', count: 3, base: 32 }
+];
 function planArmy(list) {
-	return list.units.map(u => {
+	const plan = list.units.map(u => {
 		const models = u.models.map(m => { const c = findCardFor(m.name, list.faction) || findCardFor(u.name, list.faction); return { ...m, card: c }; });
 		const card = findCardFor(u.name, list.faction) || models[0].card || null;
 		const total = models.reduce((s, m) => s + m.count, 0);
 		return { ...u, models, card, total, supply: supplyFor(card, total) ?? 0 };
 	});
+	const has = (names, want) => names.some(n => { const k = cardKey(n); return k === cardKey(want) || new RegExp('(^| )' + cardKey(want) + 's?( |$)').test(k); });
+	const cardNames = list.cards || [], unitNames = plan.flatMap(u => [u.name, u.card?.name || '', ...u.models.map(m => m.name)]);
+	for (const e of EXTRA_UNITS) {
+		if (e.card ? !has(cardNames, e.card) : !has(unitNames, e.unit)) continue;
+		if (plan.some(u => cardKey(u.name) === cardKey(e.name))) continue;   // already in the list
+		const card = findCardFor(e.name, list.faction);
+		plan.push({ name: e.name, section: 'Extra', cost: '', upgrades: [], models: [{ count: e.count, name: e.name, card, baseMm: e.base }], card, total: e.count, supply: 0, extra: e.card || e.unit });
+	}
+	return plan;
 }
 // ---- the six example armies of the rulebook (12.12 Example Armies): units, models, upgrades and cards,
 // written out as a New Recruit style list so they go through the same import
@@ -4207,7 +4226,7 @@ function renderListPreview() {
 	$('#listPreview').innerHTML = `<p class="note">${esc(list.faction || 'Army')}: ${plural(plan.length, 'unit')}, ${plural(models, 'model')}, ${supply} supply.`
 		+ (!LIB ? ' Load the card library to get bases, supply and portraits.' : missing ? ` ${missing} without a card get 32 mm bases.` : '') + `</p>`
 		+ `<ul class="ulist">${plan.map(u => `<li>${u.card?.portrait ? `<span class="thumb" style="border-color:var(--line)"><img src="${esc(u.card.portrait)}" alt=""></span>` : ''}<span class="nm"><b>${esc(u.name)}</b> · ${u.models.map(m => `${m.count}× ${esc(m.name)}`).join(', ')}`
-			+ `${u.upgrades.length ? `<br><span class="note">${esc(u.upgrades.join(', '))}</span>` : ''}</span><span class="mm">${u.card ? `${u.supply} sup` : 'no card'}</span></li>`).join('')}</ul>`
+			+ `${u.upgrades.length ? `<br><span class="note">${esc(u.upgrades.join(', '))}</span>` : ''}${u.extra ? `<br><span class="note">from ${esc(u.extra)}</span>` : ''}</span><span class="mm">${u.card ? `${u.supply} sup` : 'no card'}</span></li>`).join('')}</ul>`
 		+ (list.cards.length ? `<p class="note">Tactical cards: ${list.cards.map(n => { const t = tacticFrom(n, 0, list.faction); return `${esc(t.name)} (${t.value} ${t.res})`; }).join(', ')}</p>` : '')
 		+ (list.deployments.length ? `<p class="note">Deployments in this list: ${list.deployments.map(k => `<button type="button" class="btn" data-dep="${k}">${esc(DEPLOYMENTS[k].name)}</button>`).join(' ')}</p>` : '');
 }

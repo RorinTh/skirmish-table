@@ -57,6 +57,10 @@ Right-click an empty spot of the table and choose **Place faction token here…*
 
 Each player's Faction and Tactical cards sit in the board's right corners, Player 2 at the top and Player 1 at the bottom, with every card always in view. Click **Ready** / **Used** to exhaust or ready a card; the counter shows what is still available. **+** opens a row to add a card or ready them all. The **i** above the bottom panel explains the cards when you point at it.
 
+## Units a card brings
+
+Some cards set an extra unit on the battlefield that the list does not buy. Importing a list (or an example army) puts those in the reserves too, at 0 supply: the Point Defense Drone (Raynor's Raiders), the Pylon (Khalai), the Omega Worm (Kerrigan's Swarm), the Sabotage Drone (Nova Covert Ops), the Holo Decoy (Nova), the Auto-Turret (Raven) and three Roachlings (Corpser). The import preview shows which card each comes from.
+
 ## Example armies
 
 Under **Import army list**, the list **Or an example army from the rulebook** holds the six example armies of the rulebook (12.12): Terran Armed Forces, Raynor's Raiders, Zerg Swarm, Kerrigan's Swarm, Daelaam and Khalai, 1000 Minerals each. Choosing one fills in the list box with its units, upgrades, Faction and Tactical cards, missions and deployments; pick the player and press **Add army to table**.
