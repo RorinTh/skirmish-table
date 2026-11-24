@@ -634,6 +634,14 @@ mark { background: var(--tape); color: var(--tape-ink); border-radius: 2px; }
 			<form class="box st-setup" id="terrainForm">
 				<h2><span class="stepn">3</span>Terrain</h2>
 				<p class="note" title="Colours show its Size: scatter, low cover, sight-blocking, high ground, or grass (blocks sight but can be crossed). The rulebook suggests 8–12 pieces on a 54×36″ table.">Click a piece to place it. Q / E turns the selected piece.</p>
+				<div class="field">
+					<label for="terMapSel">Rulebook map (Map Layouts)</label>
+					<div class="row" style="flex-wrap:nowrap">
+						<select id="terMapSel" style="flex:1;min-width:0"></select>
+						<button class="btn" type="button" id="terMapPlace" title="Replace the terrain on the table with this map">Place</button>
+						<button class="btn" type="button" id="terMapRoll" title="Roll for one of the maps, as the rulebook says (D6 for a Standard Engagement, D3 for Skirmish)">Roll</button>
+					</div>
+				</div>
 				<div class="terrpick" id="terPresets"></div>
 				<details>
 					<summary>Custom piece</summary>
@@ -2207,6 +2215,205 @@ function addTerrainObj(t) {
 	objs.set(t.id, o);
 	return o;
 }
+// ---- the rulebook's pre-made maps (Map Layouts, Lost Temple terrain), read off their 6" grid: X from the left edge,
+// Y from the bottom edge, in inches. Most are point-symmetric: `half` holds one of each pair, the other is turned 180°.
+const TERRAIN_MAPS = {
+  std1: { name: 'Standard map 1', page: 116, w: 54, d: 36, half: [
+    { k: 'w5', p: [[5.6, 6.1], [5.6, 9.3], [12.9, 9.3]] },
+    { k: 'w4', p: [[12.9, 9.3], [20, 9.3], [20, 6.1]] },
+    { k: 'w1', p: [[10.5, 27.7], [17.4, 28.1]] },
+    { k: 'w3', p: [[8.0, 32.0], [10.0, 30.0], [10.8, 27.8]] },
+    { k: 'w2', p: [[16.9, 18.3], [20.8, 17.1], [24.9, 18.1]] },
+    { k: 'w6', p: [[16.7, 21.0], [17.0, 18.3]] },
+    { k: 'head', at: [8.3, 18.2] },
+    { k: 'shard', at: [4.1, 24.5] },
+    { k: 'shrub', p: [[10.5, 17.9], [16.3, 18.4]] },
+    { k: 'shrub', p: [[5.4, 23.2], [7.6, 19.6]] },
+    { k: 'gas', at: [26.9, 26.9] },
+    { k: 'banner', at: [14.9, 12.1] },
+    { k: 'obelisk', at: [23.0, 21.4] }
+  ] },
+  std2: { name: 'Standard map 2', page: 117, w: 54, d: 36, half: [
+    { k: 'w4', p: [[19.0, 14.7], [16.2, 14.7], [16.2, 7.9]] },
+    { k: 'w2', p: [[16.9, 7.7], [20.7, 9.1], [24.2, 9.6]] },
+    { k: 'head', at: [15.4, 6.1] },
+    { k: 'shrub', p: [[14.9, 5.0], [11.3, 1.4]] },
+    { k: 'shard', at: [10.3, 1.1] },
+    { k: 'gas', at: [23.8, 14.4] },
+    { k: 'banner', at: [22.6, 21.5] },
+    { k: 'obelisk', at: [8.4, 27.7] },
+    { k: 'w1', p: [[16.3, 29.2], [22.8, 29.3]] },
+    { k: 'w5', p: [[16.1, 29.1], [16.1, 21.9], [19.0, 22.1]] },
+    { k: 'w3', p: [[4.6, 18.5], [6.6, 20.3], [9.0, 20.6]] },
+    { k: 'w6', p: [[9.1, 20.6], [12.0, 20.7]] },
+    { k: 'shrub', p: [[12.2, 21.0], [16.5, 22.3]] }
+  ] },
+  std3: { name: 'Standard map 3', page: 118, w: 54, d: 36, half: [
+    { k: 'w4', p: [[19.0, 11.1], [19.0, 3.9], [16.1, 3.7]] },
+    { k: 'w6', p: [[19.2, 11.1], [21.0, 12.9]] },
+    { k: 'banner', at: [14.7, 3.8] },
+    { k: 'w2', p: [[25.6, 9.2], [28.9, 11.1], [33.5, 10.9]] },
+    { k: 'w5', p: [[34.1, 10.8], [34.1, 3.9], [36.9, 3.7]] },
+    { k: 'shrub', p: [[25.6, 9.3], [23.1, 11.6]] },
+    { k: 'shard', at: [7.7, 7.2] },
+    { k: 'head', at: [44.1, 9.3] },
+    { k: 'obelisk', at: [14.6, 14.9] },
+    { k: 'gas', at: [19.5, 18.3] },
+    { k: 'w1', p: [[4.3, 20.0], [11.3, 20.1]] },
+    { k: 'w3', p: [[11.5, 20.0], [13.8, 21.2], [15.8, 22.6]] },
+    { k: 'shrub', p: [[15.8, 22.6], [18.5, 19.4]] }
+  ] },
+  std4: { name: 'Standard map 4', page: 119, w: 54, d: 36, half: [
+    { k: 'w2', p: [[9.7, 11.3], [12.2, 8.5], [13.8, 4.3]] },
+    { k: 'obelisk', at: [8.6, 9.0] },
+    { k: 'gas', at: [21.3, 28.9] },
+    { k: 'shard', at: [30.9, 34.3] },
+    { k: 'head', at: [5.5, 21.9] },
+    { k: 'w3', p: [[7.3, 28.2], [12.2, 30.2]] },
+    { k: 'banner', at: [6.8, 28.0] },
+    { k: 'shrub', p: [[12.3, 29.8], [13.4, 25.9]] },
+    { k: 'w1', p: [[13.8, 25.5], [13.8, 19.4]] },
+    { k: 'w4', p: [[14.1, 19.2], [20.6, 19.2], [20.8, 16.2]] },
+    { k: 'w5', p: [[20.8, 15.7], [20.8, 9.0], [23.7, 9.0]] },
+    { k: 'shrub', p: [[21.3, 19.4], [26.0, 20.5]] },
+    { k: 'w6', p: [[26.4, 20.5], [29.0, 21.4]] }
+  ] },
+  std5: { name: 'Standard map 5', page: 120, w: 54, d: 36, half: [
+    { k: 'plat', r: [15.6, 19.6, 27.1, 23.3] },
+    { k: 'plat', r: [21.7, 15.3, 27.1, 19.6] },
+    { k: 'slope', r: [12.3, 15.6, 21.7, 19.6] },
+    { k: 'obelisk', at: [25.4, 21.9] },
+    { k: 'w3', p: [[9.3, 32.3], [8.0, 30.2], [7.9, 28.0]] },
+    { k: 'w2', p: [[7.9, 27.7], [8.4, 24.1], [9.5, 23.0], [9.8, 19.8]] },
+    { k: 'shard', at: [8.4, 21.0] },
+    { k: 'head', at: [2.3, 17.8] },
+    { k: 'banner', at: [7.7, 16.2] },
+    { k: 'w1', p: [[7.5, 15.4], [6.2, 9.3]] },
+    { k: 'w4', p: [[6.2, 9.0], [12.3, 7.2], [12.2, 5.0]] },
+    { k: 'gas', at: [13.8, 12.2] },
+    { k: 'w5', p: [[26.9, 12.7], [22.3, 7.9], [24.2, 5.2]] },
+    { k: 'shrub', p: [[31.8, 12.4], [31.8, 8.2]] },
+    { k: 'w6', p: [[32.1, 7.6], [32.1, 5.0]] },
+    { k: 'shrub', p: [[31.9, 4.6], [31.9, 0.6]] }
+  ] },
+  std6: { name: 'Standard map 6', page: 121, w: 54, d: 36, half: [
+    { k: 'plat', r: [5.9, 17.6, 16.7, 21.5] },
+    { k: 'plat', r: [12.0, 13.6, 16.7, 17.6] },
+    { k: 'slope', r: [1.9, 13.8, 12.0, 17.6] },
+    { k: 'w4', p: [[16.3, 35.6], [16.7, 29.8], [13.6, 29.2]] },
+    { k: 'head', at: [24.2, 31.2] },
+    { k: 'shard', at: [48.5, 30.7] },
+    { k: 'gas', at: [9.3, 26.7] },
+    { k: 'obelisk', at: [4.4, 31.5] },
+    { k: 'w3', p: [[22.6, 21.2], [24.2, 23.0], [25.9, 23.8]] },
+    { k: 'banner', at: [26.4, 23.7] },
+    { k: 'w2', p: [[16.7, 13.5], [19.2, 11.8], [21.0, 10.4], [24.2, 9.3]] },
+    { k: 'shrub', p: [[24.2, 10.0], [23.3, 7.6]] },
+    { k: 'w1', p: [[23.1, 7.9], [23.1, 0.7]] },
+    { k: 'w5', p: [[7.7, 7.2], [10.8, 6.8], [10.8, 0.4]] },
+    { k: 'w6', p: [[9.8, 13.3], [9.5, 11.1]] },
+    { k: 'shrub', p: [[9.1, 10.8], [8.0, 7.9]] }
+  ] },
+  sk1: { name: 'Skirmish map 1', page: 122, w: 36, d: 36, half: [], solo: [
+    { k: 'gas', at: [13.4, 33.9] },
+    { k: 'shrub', p: [[13.5, 32.5], [12.3, 28.2]] },
+    { k: 'w2', p: [[11.1, 27.2], [13.0, 24.0], [16.2, 21.3]] },
+    { k: 'w4', p: [[28.9, 31.9], [25.8, 32.4], [25.8, 25.4]] },
+    { k: 'w3', p: [[25.5, 25.4], [23.0, 25.0], [21.2, 23.1]] },
+    { k: 'w6', p: [[4.1, 24.0], [7.1, 24.1]] },
+    { k: 'shard', at: [9.1, 17.6] },
+    { k: 'obelisk', at: [29.2, 17.4] },
+    { k: 'w1', p: [[18.7, 15.8], [24.4, 12.6]] },
+    { k: 'w5', p: [[7.1, 11.4], [9.8, 11.4], [10.0, 4.2]] },
+    { k: 'shrub', p: [[23.7, 12.2], [23.3, 7.2]] },
+    { k: 'banner', at: [18.5, 9.0] },
+    { k: 'head', at: [24.0, 5.1] }
+  ] },
+  sk2: { name: 'Skirmish map 2', page: 123, w: 36, d: 36, half: [], solo: [
+    { k: 'gas', at: [10.2, 31.5] },
+    { k: 'head', at: [24.3, 33.7] },
+    { k: 'shrub', p: [[24.3, 32.2], [24.3, 27.7]] },
+    { k: 'w5', p: [[10.9, 24.2], [10.9, 27.0], [17.6, 27.0]] },
+    { k: 'w4', p: [[17.9, 27.0], [25.0, 27.0], [25.0, 24.2]] },
+    { k: 'banner', at: [18.3, 21.1] },
+    { k: 'w3', p: [[30.0, 20.6], [31.0, 18.1], [30.5, 15.8]] },
+    { k: 'w6', p: [[4.2, 17.6], [7.2, 17.6]] },
+    { k: 'shard', at: [17.6, 15.4] },
+    { k: 'w1', p: [[12.9, 12.1], [12.9, 5.6]] },
+    { k: 'shrub', p: [[13.1, 5.1], [12.9, 0.7]] },
+    { k: 'w2', p: [[23.5, 13.6], [25.0, 10.4], [24.0, 6.6]] },
+    { k: 'obelisk', at: [21.5, 4.8] }
+  ] },
+  sk3: { name: 'Skirmish map 3', page: 124, w: 36, d: 36, half: [], solo: [
+    { k: 'plat', r: [8.4, 16.1, 13.6, 23.9] },
+    { k: 'plat', r: [13.6, 16.1, 19.9, 20.1] },
+    { k: 'slope', r: [13.6, 20.1, 23.3, 23.9] },
+    { k: 'w4', p: [[11.4, 31.0], [8.4, 31.0], [8.6, 24.4]] },
+    { k: 'banner', at: [15.9, 29.5] },
+    { k: 'obelisk', at: [26.2, 29.4] },
+    { k: 'w2', p: [[31.5, 31.5], [30.3, 28.2], [30.0, 24.7]] },
+    { k: 'shrub', p: [[30.0, 24.2], [30.3, 22.6]] },
+    { k: 'w6', p: [[0.4, 14.1], [2.9, 14.1]] },
+    { k: 'w5', p: [[8.7, 15.6], [8.7, 9.1], [11.4, 8.9]] },
+    { k: 'head', at: [24.3, 14.1] },
+    { k: 'w3', p: [[26.0, 8.6], [28.0, 10.1], [30.2, 10.1]] },
+    { k: 'shrub', p: [[30.5, 9.8], [35.5, 9.8]] },
+    { k: 'gas', at: [3.2, 5.8] },
+    { k: 'shrub', p: [[16.2, 7.6], [17.6, 6.6]] },
+    { k: 'w1', p: [[17.6, 6.6], [17.8, 0.5]] },
+    { k: 'shard', at: [27.5, 4.3] }
+  ] }
+};
+// what each kind of piece becomes on the table: shape, Size class, footprint thickness / size and height
+const MAP_PIECES = {
+	w1: { name: 'Wall set 1', wall: true }, w2: { name: 'Wall set 2', wall: true }, w3: { name: 'Wall set 3', wall: true },
+	w4: { name: 'Wall set 4', wall: true }, w5: { name: 'Wall set 5', wall: true }, w6: { name: 'Wall set 6', wall: true },
+	shrub: { name: 'Shrubs', shape: 'grass', cls: 'grass', d: 1.8, h: 2 },
+	head: { name: 'Head statue', shape: 'circle', cls: '1', w: 3.6, d: 2.8, h: 2 },
+	shard: { name: 'Statue shard', shape: 'circle', cls: '1', w: 2.6, d: 2, h: 1.5 },
+	gas: { name: 'Vespene geyser', shape: 'circle', cls: '1', w: 3, d: 3, h: 1 },
+	banner: { name: 'Protoss banner', shape: 'rect', cls: '2', w: 1.5, d: 1, h: 4 },
+	obelisk: { name: 'Temple obelisk', shape: 'rect', cls: '2', w: 1.5, d: 1.5, h: 5 },
+	plat: { name: 'Lost Temple platform', shape: 'rect', cls: '3', h: 3 },
+	slope: { name: 'Lost Temple ramp', shape: 'rect', cls: '1', h: 1.5 }
+};
+function mapTerrain(L) {
+	const all = [], mirror = q => [L.w - q[0], L.d - q[1]];
+	for (const p of L.half || []) { all.push(p); all.push(p.p ? { ...p, p: p.p.map(mirror) } : p.r ? { ...p, r: [L.w - p.r[2], L.d - p.r[3], L.w - p.r[0], L.d - p.r[1]] } : { ...p, at: mirror(p.at) }); }
+	all.push(...(L.solo || []));
+	const out = [], at = (X, Y) => ({ x: X - L.w / 2, z: L.d / 2 - Y });
+	for (const p of all) {
+		const k = MAP_PIECES[p.k]; if (!k) continue;
+		if (p.p) {   // a wall or a row of shrubs: one straight piece per leg, overlapping at the bends
+			for (let i = 0; i + 1 < p.p.length; i++) {
+				const [a, b] = [p.p[i], p.p[i + 1]], len = Math.hypot(b[0] - a[0], b[1] - a[1]), t = k.wall ? 1.1 : k.d;
+				out.push({ name: k.name, shape: k.wall ? 'rect' : k.shape, cls: k.wall ? '2' : k.cls, w: Math.max(0.5, len + (k.wall ? t : 0)), d: t, h: k.wall ? 3 : k.h,
+					...at((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), rot: Math.atan2(b[1] - a[1], b[0] - a[0]) });
+			}
+		} else if (p.r) out.push({ name: k.name, shape: k.shape, cls: k.cls, w: p.r[2] - p.r[0], d: p.r[3] - p.r[1], h: k.h, ...at((p.r[0] + p.r[2]) / 2, (p.r[1] + p.r[3]) / 2), rot: 0 });
+		else out.push({ name: k.name, shape: k.shape, cls: k.cls, w: k.w, d: k.d, h: k.h, ...at(p.at[0], p.at[1]), rot: 0 });
+	}
+	return out;
+}
+// the maps that fit the table: the Standard ones on 54 x 36", the Skirmish ones on 36 x 36"
+const mapsForTable = () => Object.entries(TERRAIN_MAPS).filter(([, L]) => L.w === state.table.w && L.d === state.table.d);
+function placeTerrainMap(id) {
+	const L = TERRAIN_MAPS[id]; if (!L) return;
+	const before = state.terrain.map(t => ({ ...t }));
+	for (const t of state.terrain) removeObj(t.id);
+	state.terrain = mapTerrain(L).map(p => normTerrain({ ...p, id: newId('t') }));
+	for (const t of state.terrain) addTerrainObj(t);
+	undoStack.push({ t: 'terrain', terrain: before });
+	if (sel?.kind === 'terrain') select(null);
+	renderLists(); save();
+	toast(`${esc(L.name)} from the rulebook (page ${L.page}): ${plural(state.terrain.length, 'piece')} placed. Undo puts the old terrain back.`);
+}
+function renderTerrainMaps() {
+	const ms = mapsForTable(), sel0 = $('#terMapSel');
+	sel0.innerHTML = ms.length ? ms.map(([id, L]) => `<option value="${id}">${esc(L.name)} · rulebook page ${L.page}</option>`).join('') : '<option value="">No rulebook map for this table size</option>';
+	sel0.disabled = $('#terMapPlace').disabled = $('#terMapRoll').disabled = !ms.length;
+	$('#terMapRoll').textContent = ms.length ? `Roll D${ms.length}` : 'Roll';
+}
 function addTerrainPiece(p) {
 	const t = normTerrain({ ...p, id: newId('t'), x: 0, z: 0, rot: 0 });
 	state.terrain.push(t); addTerrainObj(t);
@@ -3267,6 +3474,10 @@ function undo() {
 		const it = a.kind === 'mini' ? findMini(a.id) : findTerrain(a.id);
 		if (it) { it.x = a.from.x; it.z = a.from.z; objs.get(it.id).g.position.set(it.x, 0, it.z); }
 		syncRanges(); updateMeasure();
+	} else if (a.t === 'terrain') {
+		for (const t of state.terrain) removeObj(t.id);
+		state.terrain = a.terrain.map(normTerrain); state.terrain.forEach(addTerrainObj);
+		if (sel?.kind === 'terrain') select(null);
 	} else if (a.t === 'mglow') {
 		const m = findMini(a.id);
 		if (m) { m.glow = a.glow; refreshGlow(objs.get(m.id)); }
@@ -4285,6 +4496,14 @@ $('#addForm').addEventListener('submit', e => {
 
 $('#terPresets').innerHTML = TERRAIN_PRESETS.map((p, i) =>
 	`<button type="button" data-i="${i}"><span class="swatch" style="background:#${TERRAIN_CLS[p.cls].color.toString(16).padStart(6, '0')}"></span><span>${esc(p.name)}</span><small>${p.w}×${p.d}″</small></button>`).join('');
+$('#terMapPlace').addEventListener('click', () => placeTerrainMap($('#terMapSel').value));
+$('#terMapRoll').addEventListener('click', () => {
+	const ms = mapsForTable(); if (!ms.length) return;
+	const k = (d6() - 1) % ms.length;   // D6, or a D3 for three maps
+	$('#terMapSel').value = ms[k][0];
+	placeTerrainMap(ms[k][0]);
+	toast(`Rolled ${k + 1}: ${esc(ms[k][1].name)}, ${plural(state.terrain.length, 'piece')} placed`);
+});
 $('#terPresets').addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) addTerrainPiece(TERRAIN_PRESETS[+b.dataset.i]); });
 $('#terShape').innerHTML = Object.entries(TERRAIN_SHAPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 $('#terCls').innerHTML = Object.entries(TERRAIN_CLS).map(([k, v]) => `<option value="${k}" ${k === '2' ? 'selected' : ''}>${v.label}</option>`).join('');
@@ -4349,6 +4568,8 @@ $('#helpBtn').addEventListener('click', () => openViewer('How to use the table',
 	<h4>Right-click</h4>
 	<ul><li>A model: activation tokens (Movement, Assault), tokens, a glow on that model, reserves, Blast Template.</li>
 	<li>A Mission Marker: set control by hand. An empty spot: place a faction token or a Blast Template.</li></ul>
+	<h4>Terrain</h4>
+	<ul><li>Setup › Terrain: pick one of the rulebook's maps (Map Layouts) and <b>Place</b> it, or <b>Roll</b> for one: D6 on a 54×36″ table, D3 on 36×36″. Every piece can be moved, turned or resized afterwards; Undo puts the old terrain back.</li></ul>
 	<h4>Rounds</h4>
 	<ul><li><b>End round</b> (top) decides who controls each Mission Marker, then starts the next round: tactical cards are readied and end-of-round tokens removed.</li></ul>
 	<h4>Keys</h4>
@@ -4531,7 +4752,8 @@ function updateQuarters() {
 	for (const x of perUnit) { const L = unitQLabels.get(x.u.id); if (L) { const p = shownAt(x.m); L.pos.set(p.x, 0, p.z + radius(x.m) + 0.3); L.center = true; } }
 }
 function syncTableInputs() {
-	try { renderMissionSel(); } catch { }   // the card library may not be set up yet while the page starts
+	try { renderMissionSel(); } catch { }
+	try { renderTerrainMaps(); } catch { }   // the card library may not be set up yet while the page starts
 	$('#deploySel').value = state.table.deploy || '';
 	$('#deployNote').textContent = state.table.deploy
 		? 'Coloured areas are each side’s entry edges. Markers 1 and 3 are Red’s, 2 and 4 Blue’s, 5 is neutral; the ring shows the 3″ contest range. Models contesting a marker show its number on their base, and the marker shows each side’s supply on it. A side takes control when it has more supply there, and the marker glows in its colour. Right-click a marker to set control by hand.' : '';

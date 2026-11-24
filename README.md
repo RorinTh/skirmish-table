@@ -39,6 +39,10 @@ Under the deployment in Setup, pick a **Mission**: Supply Drop, Hold Position, F
 
 With **Divide and Conquer**, dashed lines split the table into quarters through its centre. Each quarter shows the supply each side has Wholly Within it (a unit controlling a Mission Marker counts 1 more), framed in the colour of the side with more. Every unit on the table shows which quarter it is wholly in under its first model, or *no quarter* when it crosses a line and counts in none.
 
+## Terrain maps
+
+Under **Setup › Terrain**, the rulebook's pre-made maps (Map Layouts) can be placed in one click: six for a 54×36″ table and three for 36×36″, built from the Lost Temple terrain set (wall sets 1–6, shrubs, head statues, statue shards, Vespene Geysers, Protoss banners, temple obelisks and the Lost Temple Ramp). **Place** puts the chosen map on the table in place of the terrain there; **Roll** picks one as the rulebook says (D6 for Standard, D3 for Skirmish). Only piece positions and sizes are stored (read off the maps' 6″ grid), no artwork; the Size of each piece is a best guess (walls Size 2, statues and geysers Size 1, shrubs Grass, the ramp's platform high ground) and can be changed per piece.
+
 ## Mission Markers
 
 With a deployment chosen, a model whose base is within 3″ of a Mission Marker contests it and shows the marker's number on its base. Each marker shows the supply each side has on it (every unit with a model there counts once; a Commander, a Supply Depot or a Domineering Presence counts one more). Control is decided when a player presses **End round**: the side with more supply on a marker takes it, and the marker then glows in that player's colour. A tie or an empty marker keeps its control, and every marker starts with no one controlling it. Right-click a marker to set control by hand.
